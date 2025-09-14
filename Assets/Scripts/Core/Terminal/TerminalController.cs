@@ -9,6 +9,7 @@ public class TerminalController : MonoBehaviour
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private ScrollRect scrollRect;
     [SerializeField] private TerminalConfig config;
+    [SerializeField] private PromptConfig promptConfig;
 
     private TerminalInputHandler inputHandler;
     private TerminalOutputHandler outputHandler;
@@ -17,9 +18,9 @@ public class TerminalController : MonoBehaviour
 
     private void Awake()
     {
-        outputHandler = new TerminalOutputHandler(outputText, scrollRect);
-        history = new TerminalHistory();
         commandProcessor = new CommandProcessor();
+        outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor);
+        history = new TerminalHistory();
         inputHandler = new TerminalInputHandler(inputField, history, ProcessCommand);
     }
 

@@ -5,6 +5,7 @@ public class CommandProcessor
   private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
   private VirtualFileSystem fileSystem;
   private VirtualNetwork network;
+  public bool LastCommandSucceeded { get; private set; } = true;
 
   public CommandProcessor()
   {
@@ -33,11 +34,21 @@ public class CommandProcessor
 
     if (commands.TryGetValue(commandName, out ICommand command))
     {
-      command.Execute(args, output);
+      try
+      {
+        command.Execute(args, output);
+        LastCommandSucceeded = true;
+      }
+      catch (System.Exception ex)
+      {
+        output.AppendText($"Command error: {ex.Message}\n");
+        LastCommandSucceeded = false;
+      }
     }
     else
     {
       output.AppendText($"Command not found: {commandName}\n");
+      LastCommandSucceeded = false;
     }
   }
 

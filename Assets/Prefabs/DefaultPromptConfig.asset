@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd630713473d61ba29e8f6a794694d3d, type: 3}
+  m_Name: DefaultPromptConfig
+  m_EditorClassIdentifier: 
+  enablePowerline: 1
+  promptSymbol: '>'
+  showUserBadge: 1
+  showDirectoryBadge: 1
+  showStatusBadge: 1
+  showTimeBadge: 0
+  userBadgeBackground: {r: 0.3, g: 0.6, b: 0.3, a: 1}
+  userBadgeText: {r: 1, g: 1, b: 1, a: 1}
+  dirBadgeBackground: {r: 0.2, g: 0.4, b: 0.6, a: 1}
+  dirBadgeText: {r: 1, g: 1, b: 1, a: 1}
+  successBackground: {r: 0.2, g: 0.7, b: 0.3, a: 1}
+  failureBackground: {r: 0.8, g: 0.2, b: 0.2, a: 1}
+  promptColor: {r: 1, g: 1, b: 1, a: 1}
+  userIcon: "\U0001F464"
+  dirIcon: "\U0001F4C1"
+  timeIcon: "\u23F1"

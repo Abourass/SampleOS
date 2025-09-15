@@ -5,7 +5,7 @@ public class PromptConfig : ScriptableObject
 {
   [Header("Powerline Settings")]
   public bool enablePowerline = true;
-  public string promptSymbol = ">";
+  public string promptSymbol = "";
 
   [Header("Badge Configuration")]
   public bool showUserBadge = true;

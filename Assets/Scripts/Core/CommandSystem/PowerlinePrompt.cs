@@ -45,7 +45,7 @@ public class PowerlinePrompt
   /// <summary>
   /// Generates the complete prompt with all badges
   /// </summary>
-  public string Generate(string promptSymbol = ">")
+  public string Generate(string promptSymbol = "")
   {
     StringBuilder result = new StringBuilder();
 
@@ -56,9 +56,12 @@ public class PowerlinePrompt
       result.Append(badges[i].Render(nextBadge));
     }
 
-    // Add the prompt symbol
-    string promptHex = ColorUtility.ToHtmlStringRGB(promptColor);
-    result.Append($" <color=#{promptHex}>{promptSymbol}</color> ");
+    if (promptSymbol != "")
+    {
+      // Add the prompt symbol
+      string promptHex = ColorUtility.ToHtmlStringRGB(promptColor);
+      result.Append($" <color=#{promptHex}>{promptSymbol}</color> ");
+    }
 
     return result.ToString();
   }

@@ -6,7 +6,7 @@ using UnityEngine;
 public class PowerlineBadge
 {
   // Font name to use in rich text tags - should match your Nerd Font asset name
-  public const string FONT_NAME = "FiraCodeRetina SDF";
+  public const string FONT_NAME = "FiraCodeRegular SDF";
 
   // Powerline symbols from Nerd Font
   public const string SEPARATOR_FILLED_RIGHT = "\uE0B0";   // 
@@ -54,12 +54,17 @@ public class PowerlineBadge
     // Use the font tag on the outside, then mark, then color - based on working test case 7
     string badge = $"<font=\"{FONT_NAME}\"><mark=#{bgHex} padding=\"4,4,2,2\"><color=#{textHex}> {iconPart}{Text} </color></mark></font>";
 
-    // Add separator if there's a next badge
+    // Add separator if there's a next badge or a final separator background
     if (nextBadge != null)
     {
       string nextBgHex = ColorUtility.ToHtmlStringRGB(nextBadge.BackgroundColor);
       // Use mark tag to set background to next badge's color, while keeping text color as current badge's bg
       badge += $"<font=\"{FONT_NAME}\"><mark=#{nextBgHex}><color=#{bgHex}>{SEPARATOR_FILLED_RIGHT}</color></mark></font>";
+    }
+    else
+    {
+      // Add final separator using prompt background color
+      badge += $"<font=\"{FONT_NAME}\"><color=#{bgHex}>{SEPARATOR_FILLED_RIGHT}</color></font>";
     }
 
     return badge;

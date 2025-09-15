@@ -3,6 +3,7 @@ using System.Collections.Generic;
 public class CommandProcessor
 {
   private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
+  private Dictionary<string, string> aliases = new Dictionary<string, string>();
   private VirtualFileSystem fileSystem;
   private VirtualNetwork network;
   public bool LastCommandSucceeded { get; private set; } = true;
@@ -21,6 +22,7 @@ public class CommandProcessor
     RegisterCommand(new SshCommand(network, this));
     RegisterCommand(new HelpCommand(commands));
     RegisterCommand(new ClearCommand());
+    RegisterCommand(new AliasCommand(aliases));
   }
 
   public void ProcessCommand(string input, ITerminalOutput output)
@@ -31,6 +33,30 @@ public class CommandProcessor
     string commandName = parts[0].ToLower();
     string[] args = new string[parts.Length - 1];
     System.Array.Copy(parts, 1, args, 0, parts.Length - 1);
+
+    // Check if the command is an alias
+    if (aliases.TryGetValue(commandName, out string aliasCommand))
+    {
+      // Split the alias command into parts
+      string[] aliasParts = aliasCommand.Split(' ');
+      
+      // Replace the command with the alias target
+      commandName = aliasParts[0].ToLower();
+      
+      // Combine alias args with original args
+      if (aliasParts.Length > 1)
+      {
+        string[] aliasArgs = new string[aliasParts.Length - 1];
+        System.Array.Copy(aliasParts, 1, aliasArgs, 0, aliasParts.Length - 1);
+        
+        // Combine the alias args and the original args
+        string[] combinedArgs = new string[aliasArgs.Length + args.Length];
+        aliasArgs.CopyTo(combinedArgs, 0);
+        args.CopyTo(combinedArgs, aliasArgs.Length);
+        
+        args = combinedArgs;
+      }
+    }
 
     if (commands.TryGetValue(commandName, out ICommand command))
     {

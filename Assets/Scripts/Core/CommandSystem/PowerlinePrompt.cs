@@ -76,7 +76,7 @@ public class PowerlinePrompt
         dirName,
         new Color(0.2f, 0.4f, 0.6f), // Blue background
         Color.white,                  // White text
-        "📁"                           // Folder icon
+        PowerlineBadge.ICON_FOLDER    // Folder icon
     );
   }
 
@@ -88,8 +88,8 @@ public class PowerlinePrompt
     return new PowerlineBadge(
         username,
         new Color(0.3f, 0.6f, 0.3f), // Green background
-        Color.white,                  // White text
-        "👤"                          // User icon
+        new Color(1f, 1f, 1f),                  // White text
+        PowerlineBadge.ICON_USER      // User icon
     );
   }
 
@@ -99,10 +99,10 @@ public class PowerlinePrompt
   public static PowerlineBadge CreateStatusBadge(bool success)
   {
     return new PowerlineBadge(
-        success ? "✓" : "✗",
+        success ? "OK" : "ERR",
         success ? new Color(0.2f, 0.7f, 0.3f) : new Color(0.8f, 0.2f, 0.2f), // Green or red
         Color.white,
-        ""
+        success ? PowerlineBadge.ICON_CHECK : PowerlineBadge.ICON_TIMES
     );
   }
 
@@ -116,7 +116,7 @@ public class PowerlinePrompt
         time,
         new Color(0.5f, 0.5f, 0.5f), // Gray background
         Color.white,                  // White text
-        "⏱"                          // Clock icon
+        PowerlineBadge.ICON_CLOCK     // Clock icon
     );
   }
 }

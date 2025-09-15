@@ -81,10 +81,7 @@ public class TerminalOutputHandler : ITerminalOutput
       if (promptConfig.showUserBadge)
       {
         powerline.AddBadge(
-            "user",
-            promptConfig.userBadgeBackground,
-            promptConfig.userBadgeText,
-            promptConfig.userIcon
+            PowerlinePrompt.CreateUserBadge(System.Environment.UserName)
         );
       }
 
@@ -96,10 +93,7 @@ public class TerminalOutputHandler : ITerminalOutput
         if (string.IsNullOrEmpty(dirName)) dirName = path;
 
         powerline.AddBadge(
-            dirName,
-            promptConfig.dirBadgeBackground,
-            promptConfig.dirBadgeText,
-            promptConfig.dirIcon
+            PowerlinePrompt.CreateDirectoryBadge(dirName)
         );
       }
 
@@ -107,10 +101,7 @@ public class TerminalOutputHandler : ITerminalOutput
       if (promptConfig.showTimeBadge)
       {
         powerline.AddBadge(
-            System.DateTime.Now.ToString("HH:mm"),
-            Color.gray,
-            Color.white,
-            promptConfig.timeIcon
+            PowerlinePrompt.CreateTimeBadge()
         );
       }
 

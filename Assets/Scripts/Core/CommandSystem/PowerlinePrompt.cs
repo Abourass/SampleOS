@@ -119,4 +119,20 @@ public class PowerlinePrompt
         PowerlineBadge.ICON_CLOCK     // Clock icon
     );
   }
+
+
+  /// <summary>
+  /// Test renders a sequence of badges to demonstrate the full prompt
+  /// </summary>
+  public static string TestFullPrompt()
+  {
+    PowerlinePrompt prompt = new PowerlinePrompt();
+    prompt.AddBadge(CreateUserBadge("guest"));
+    prompt.AddBadge(CreateDirectoryBadge("/home/guest/documents"));
+    prompt.AddBadge(CreateStatusBadge(true));
+    prompt.AddBadge(CreateTimeBadge());
+    prompt.SetPromptColor(Color.cyan);
+
+    return prompt.Generate();
+  }
 }

@@ -64,4 +64,25 @@ public class PowerlineBadge
 
     return badge;
   }
+
+  /// <summary>
+  /// Test rendering each separator & icons
+  /// </summary>
+  public static string TestRender()
+  {
+    string test = "";
+
+    // Test each symbol
+    test += $"<font=\"{FONT_NAME}\">{SEPARATOR_FILLED_RIGHT}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{SEPARATOR_THIN_RIGHT}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{SEPARATOR_FILLED_LEFT}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{SEPARATOR_THIN_LEFT}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{ICON_FOLDER}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{ICON_USER}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{ICON_CLOCK}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{ICON_CHECK}</font> ";
+    test += $"<font=\"{FONT_NAME}\">{ICON_TIMES}</font> ";
+
+    return test;
+  }
 }

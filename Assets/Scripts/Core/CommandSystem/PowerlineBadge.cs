@@ -58,8 +58,8 @@ public class PowerlineBadge
     if (nextBadge != null)
     {
       string nextBgHex = ColorUtility.ToHtmlStringRGB(nextBadge.BackgroundColor);
-      // Similar structure for the separator - font tag first, then color
-      badge += $"<font=\"{FONT_NAME}\"><color=#{bgHex}>{SEPARATOR_FILLED_RIGHT}</color></font>";
+      // Use mark tag to set background to next badge's color, while keeping text color as current badge's bg
+      badge += $"<font=\"{FONT_NAME}\"><mark=#{nextBgHex}><color=#{bgHex}>{SEPARATOR_FILLED_RIGHT}</color></mark></font>";
     }
 
     return badge;

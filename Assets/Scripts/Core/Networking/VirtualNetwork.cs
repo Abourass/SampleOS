@@ -7,8 +7,10 @@ public class VirtualNetwork
   public VirtualNetwork()
   {
     // Create some default remote systems
-    systems.Add("server", new RemoteSystem("server", "server.local", "admin"));
-    systems.Add("raspberry", new RemoteSystem("raspberry", "192.168.1.100", "pi"));
+    systems.Add("server", new RemoteSystem("server", "server.local", "192.168.1.10", "server", "admin"));
+    systems.Add("raspberry", new RemoteSystem("raspberry", "raspberrypi.local", "192.168.1.100", "embedded", "pi"));
+    systems.Add("nas", new RemoteSystem("nas", "nas.local", "192.168.1.50", "storage", "admin"));
+    systems.Add("workstation", new RemoteSystem("workstation", "workstation.local", "192.168.1.20", "desktop", "user"));
   }
 
   public Result<RemoteSystem> Connect(string host, string username, string password)
@@ -29,5 +31,33 @@ public class VirtualNetwork
     }
 
     return Result<RemoteSystem>.Failure($"Host not found: {host}");
+  }
+
+  public List<NetworkDevice> GetNetworkDevices()
+  {
+    List<NetworkDevice> devices = new List<NetworkDevice>();
+    
+    // Add the local machine
+    devices.Add(new NetworkDevice
+    {
+      Name = "localhost",
+      Hostname = "localhost",
+      IPAddress = "127.0.0.1",
+      Type = "local"
+    });
+    
+    // Add all remote systems
+    foreach (var system in systems.Values)
+    {
+      devices.Add(new NetworkDevice
+      {
+        Name = system.Name,
+        Hostname = system.Hostname,
+        IPAddress = system.IPAddress,
+        Type = system.Type
+      });
+    }
+    
+    return devices;
   }
 }

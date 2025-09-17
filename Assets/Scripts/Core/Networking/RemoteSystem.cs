@@ -3,19 +3,17 @@ public class RemoteSystem
   public string Name { get; private set; }
   public string IPAddress { get; private set; }
   public string Hostname { get; private set; }
+  public string Type { get; private set; }
   public VirtualFileSystem FileSystem { get; private set; }
 
   private string username;
 
-  public RemoteSystem(string name, string address, string defaultUser)
+  public RemoteSystem(string name, string hostname, string ipAddress, string type, string defaultUser)
   {
     Name = name;
-
-    if (address.Contains("."))
-      IPAddress = address;
-    else
-      Hostname = address;
-
+    Hostname = hostname;
+    IPAddress = ipAddress;
+    Type = type;
     username = defaultUser;
     FileSystem = new VirtualFileSystem();
 

@@ -20,6 +20,7 @@ public class CommandProcessor
     RegisterCommand(new TouchCommand(fileSystem));
     RegisterCommand(new CatCommand(fileSystem));
     RegisterCommand(new SshCommand(network, this));
+    RegisterCommand(new NetstatCommand(network));
     RegisterCommand(new HelpCommand(commands));
     RegisterCommand(new ClearCommand());
     RegisterCommand(new AliasCommand(aliases));

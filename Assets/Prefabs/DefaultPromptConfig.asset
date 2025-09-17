@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: DefaultPromptConfig
   m_EditorClassIdentifier: 
   enablePowerline: 1
-  promptSymbol: '>'
+  promptSymbol: 
   showUserBadge: 1
   showDirectoryBadge: 1
   showStatusBadge: 1

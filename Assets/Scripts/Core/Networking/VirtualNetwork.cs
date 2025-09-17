@@ -7,18 +7,40 @@ public class VirtualNetwork
 
   public VirtualNetwork()
   {
-    // Create local system
-    localSystem = new RemoteSystem("localhost", "localhost", "127.0.0.1", "desktop", "user");
+    // Create local system with high security
+    localSystem = new RemoteSystem("localhost", "localhost", "127.0.0.1", "desktop", "user", SecurityLevel.High);
 
     // Give player root access to their own system
     localSystem.GiveRootAccess();
 
-    // Create some default remote systems
-    systems.Add("server", new RemoteSystem("server", "server.local", "192.168.1.10", "server", "admin"));
-    systems.Add("raspberry", new RemoteSystem("raspberry", "raspberrypi.local", "192.168.1.100", "embedded", "pi"));
-    systems.Add("nas", new RemoteSystem("nas", "nas.local", "192.168.1.50", "storage", "admin"));
-    systems.Add("workstation", new RemoteSystem("workstation", "workstation.local", "192.168.1.20", "desktop", "user"));
-    systems.Add("router", new RemoteSystem("router", "router.local", "192.168.1.1", "router", "admin"));
+    // Create remote systems with varying security levels
+    systems.Add("server", new RemoteSystem("server", "server.local", "192.168.1.10", "server", "admin", SecurityLevel.Medium));
+    systems.Add("raspberry", new RemoteSystem("raspberry", "raspberrypi.local", "192.168.1.100", "embedded", "pi", SecurityLevel.Low)); // IoT device - less secure
+    systems.Add("nas", new RemoteSystem("nas", "nas.local", "192.168.1.50", "storage", "admin", SecurityLevel.Medium));
+    systems.Add("workstation", new RemoteSystem("workstation", "workstation.local", "192.168.1.20", "desktop", "user", SecurityLevel.High));
+    systems.Add("router", new RemoteSystem("router", "router.local", "192.168.1.1", "router", "admin", SecurityLevel.Low)); // Often neglected
+
+    // Add some special systems for progression
+    systems.Add("legacy", new RemoteSystem("legacy", "legacy.local", "192.168.1.200", "server", "admin", SecurityLevel.VeryLow)); // Easy target for beginners
+    systems.Add("secure", new RemoteSystem("secure", "secure.local", "192.168.1.250", "server", "admin", SecurityLevel.VeryHigh)); // Challenging target
+  }
+
+  public void CreateCustomNetwork(NetworkDifficultyProfile profile)
+  {
+    systems.Clear();
+
+    // Add systems according to the difficulty profile
+    foreach (var systemDef in profile.SystemDefinitions)
+    {
+      systems.Add(systemDef.Name, new RemoteSystem(
+        systemDef.Name,
+        systemDef.Hostname,
+        systemDef.IPAddress,
+        systemDef.Type,
+        systemDef.DefaultUser,
+        systemDef.SecurityLevel
+      ));
+    }
   }
 
   public Result<RemoteSystem> Connect(string host, string username, string password)

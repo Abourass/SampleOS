@@ -12,10 +12,13 @@ public class RemoteSystem
   public DateTime CreationDate { get; private set; }
 
   public string Username { get; private set; }
+
+  public SecurityLevel SecurityLevel { get; private set; }
   public bool HasRootAccess { get; private set; } = false;
   private bool vulnerabilitiesGenerated = false;
+  private System.Random securityRng;
 
-  public RemoteSystem(string name, string hostname, string ipAddress, string type, string defaultUser)
+  public RemoteSystem(string name, string hostname, string ipAddress, string type, string defaultUser, SecurityLevel securityLevel = SecurityLevel.Medium)
   {
     Name = name;
     Hostname = hostname;
@@ -23,7 +26,36 @@ public class RemoteSystem
     Type = type;
     Username = defaultUser;
     FileSystem = new VirtualFileSystem();
-    CreationDate = DateTime.Now.AddDays(-UnityEngine.Random.Range(30, 1500)); // 1 month to ~4 years old
+
+    // Generate a consistent age for the system based on hostname and security level
+    int systemSeed = hostname.GetHashCode() + (int)securityLevel;
+    securityRng = new System.Random(systemSeed);
+
+    // Older systems are more likely to have vulnerabilities
+    int ageDays;
+    switch (securityLevel)
+    {
+      case SecurityLevel.VeryLow:  // Old, unpatched systems
+        ageDays = securityRng.Next(730, 1500); // 2-4 years old
+        break;
+      case SecurityLevel.Low:
+        ageDays = securityRng.Next(365, 1095); // 1-3 years old 
+        break;
+      case SecurityLevel.Medium:
+        ageDays = securityRng.Next(180, 730);  // 6 months - 2 years
+        break;
+      case SecurityLevel.High:
+        ageDays = securityRng.Next(60, 365);   // 2 months - 1 year
+        break;
+      case SecurityLevel.VeryHigh: // Recently patched systems
+        ageDays = securityRng.Next(7, 90);     // 1 week - 3 months
+        break;
+      default:
+        ageDays = securityRng.Next(180, 730);  // Default medium
+        break;
+    }
+
+    CreationDate = DateTime.Now.AddDays(-ageDays);
 
     // Customize file system for this remote machine
     CustomizeFileSystem();
@@ -86,8 +118,15 @@ public class RemoteSystem
     VulnerabilityDatabase vulnDb = new VulnerabilityDatabase();
     foreach (Software sw in InstalledSoftware)
     {
-      // Probability increases with age
-      if (UnityEngine.Random.value <= sw.GetVulnerabilityProbability())
+      // Get base probability from software age
+      float baseProbability = sw.GetVulnerabilityProbability();
+
+      // Apply security level modifier
+      float securityModifier = GetSecurityModifier();
+      float finalProbability = baseProbability * securityModifier;
+
+      // Use the consistent RNG instead of Unity's random
+      if ((float)securityRng.NextDouble() <= finalProbability)
       {
         Vulnerability vulnerability = vulnDb.GetRandomVulnerabilityFor(sw);
         if (vulnerability != null)
@@ -98,6 +137,20 @@ public class RemoteSystem
     }
 
     vulnerabilitiesGenerated = true;
+  }
+
+  // Returns a multiplier that affects vulnerability probability based on security level
+  private float GetSecurityModifier()
+  {
+    switch (SecurityLevel)
+    {
+      case SecurityLevel.VeryLow: return 2.0f;   // Twice as likely to have vulnerabilities
+      case SecurityLevel.Low: return 1.5f;   // 50% more likely
+      case SecurityLevel.Medium: return 1.0f;   // Normal probability
+      case SecurityLevel.High: return 0.5f;   // Half as likely
+      case SecurityLevel.VeryHigh: return 0.25f;  // Quarter as likely
+      default: return 1.0f;
+    }
   }
 
   private string GetVersionBasedOnAge(string oldVersion, string newVersion)

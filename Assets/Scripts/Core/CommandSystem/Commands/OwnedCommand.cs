@@ -50,7 +50,39 @@ public class OwnedCommand : ICommand
         string paddedIP = system.IPAddress.PadRight(18).Substring(0, 18);
         string accessLevel = system.HasRootAccess ? "ROOT" : "USER";
 
-        output.AppendText($"{paddedHostname} {paddedIP} {accessLevel}\n");
+        // Get security level with color coding
+        Color securityColor;
+        switch (system.SecurityLevel)
+        {
+          case SecurityLevel.VeryLow:
+            securityColor = new Color(0.0f, 0.8f, 0.0f); // Green
+            break;
+          case SecurityLevel.Low:
+            securityColor = new Color(0.5f, 0.8f, 0.0f); // Yellow-Green
+            break;
+          case SecurityLevel.Medium:
+            securityColor = new Color(0.8f, 0.8f, 0.0f); // Yellow
+            break;
+          case SecurityLevel.High:
+            securityColor = new Color(0.9f, 0.5f, 0.0f); // Orange
+            break;
+          case SecurityLevel.VeryHigh:
+            securityColor = new Color(1.0f, 0.2f, 0.2f); // Red
+            break;
+          default:
+            securityColor = Color.white;
+            break;
+        }
+
+        output.AppendText($"{paddedHostname} {paddedIP} ");
+
+        // Change color for security level
+        output.SetColor(securityColor);
+        output.AppendText($"{system.SecurityLevel,-12}");
+
+        // Back to default color for access level
+        output.SetColor(Color.white);
+        output.AppendText($"{accessLevel}\n");
       }
     }
   }

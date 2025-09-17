@@ -56,15 +56,15 @@ public class VulnsCommand : ICommand
     // Display header
     output.AppendText("VULNERABILITY DATABASE\n");
     output.AppendText("=====================\n\n");
-    output.AppendText("CVE          SEVERITY  TARGET           SOFTWARE        NAME\n");
-    output.AppendText("------------------------------------------------------------------\n");
+    output.AppendText("CVE             | SEVERITY | TARGET           | SOFTWARE        | NAME\n");
+    output.AppendText("----------------+---------+-----------------+----------------+---------------------------\n");
 
-    // Display vulnerabilities
+    // Display vulnerabilities with clear column separators
     foreach (var vuln in vulnerabilities)
     {
       string target = $"{vuln.HostIP}:{vuln.Port}";
       output.AppendText(
-          $"{vuln.Vulnerability.CVE,-13}{vuln.Vulnerability.Severity,-10}{target,-17}{vuln.SoftwareName,-15}{vuln.Vulnerability.Name}\n"
+          $"{vuln.Vulnerability.CVE,-15} | {vuln.Vulnerability.Severity,-8} | {target,-15} | {vuln.SoftwareName,-14} | {vuln.Vulnerability.Name}\n"
       );
     }
   }

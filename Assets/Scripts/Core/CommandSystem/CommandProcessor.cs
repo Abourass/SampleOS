@@ -6,12 +6,17 @@ public class CommandProcessor
   private Dictionary<string, string> aliases = new Dictionary<string, string>();
   private VirtualFileSystem fileSystem;
   private VirtualNetwork network;
+  private RemoteSystem currentSystem;
+  private PlayerVulnerabilityInventory vulnerabilityInventory;
+  private PlayerProgressManager progressManager;
   public bool LastCommandSucceeded { get; private set; } = true;
 
   public CommandProcessor()
   {
     fileSystem = new VirtualFileSystem();
     network = new VirtualNetwork();
+    vulnerabilityInventory = new PlayerVulnerabilityInventory();
+    progressManager = new PlayerProgressManager(network);
 
     // Register commands
     RegisterCommand(new LsCommand(fileSystem));
@@ -21,9 +26,15 @@ public class CommandProcessor
     RegisterCommand(new CatCommand(fileSystem));
     RegisterCommand(new SshCommand(network, this));
     RegisterCommand(new NetstatCommand(network));
+    RegisterCommand(new NmapCommand(network));
+    RegisterCommand(new PsCommand(this));
+    RegisterCommand(new VulnScanCommand(network, vulnerabilityInventory));
+    RegisterCommand(new VulnsCommand(vulnerabilityInventory));
+    RegisterCommand(new ExploitCommand(network, this, vulnerabilityInventory, progressManager));
     RegisterCommand(new HelpCommand(commands));
     RegisterCommand(new ClearCommand());
     RegisterCommand(new AliasCommand(aliases));
+    RegisterCommand(new OwnedCommand(progressManager, network));
   }
 
   public void ProcessCommand(string input, ITerminalOutput output)
@@ -40,21 +51,21 @@ public class CommandProcessor
     {
       // Split the alias command into parts
       string[] aliasParts = aliasCommand.Split(' ');
-      
+
       // Replace the command with the alias target
       commandName = aliasParts[0].ToLower();
-      
+
       // Combine alias args with original args
       if (aliasParts.Length > 1)
       {
         string[] aliasArgs = new string[aliasParts.Length - 1];
         System.Array.Copy(aliasParts, 1, aliasArgs, 0, aliasParts.Length - 1);
-        
+
         // Combine the alias args and the original args
         string[] combinedArgs = new string[aliasArgs.Length + args.Length];
         aliasArgs.CopyTo(combinedArgs, 0);
         args.CopyTo(combinedArgs, aliasArgs.Length);
-        
+
         args = combinedArgs;
       }
     }
@@ -100,5 +111,15 @@ public class CommandProcessor
         fsCommand.SetFileSystem(fileSystem);
       }
     }
+  }
+
+  public RemoteSystem GetCurrentSystem()
+  {
+    return currentSystem;
+  }
+
+  public void SetCurrentSystem(RemoteSystem system)
+  {
+    currentSystem = system;
   }
 }

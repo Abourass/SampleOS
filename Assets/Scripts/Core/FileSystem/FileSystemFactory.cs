@@ -50,6 +50,11 @@ public static class FileSystemFactory
     // Create var logs
     var log = CreateDirectory(var, "log");
     CreateFile(log, "system.log", GetRandomLogContent(30));
+
+    // Add root directory with some content
+    var rootDir = CreateDirectory(root, "root");
+    CreateFile(rootDir, "welcome.txt", "This is the root user's home directory.\nYou have administrative access to this system.");
+    CreateFile(rootDir, "hacking_tools.txt", "List of useful hacking tools:\n- nmap: Network scanning\n- vuln-scan: Vulnerability scanning\n- exploit: Exploitation framework");
   }
 
   /// <summary>

@@ -9,6 +9,10 @@ public class TerminalController : MonoBehaviour
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private ScrollRect scrollRect;
     [SerializeField] private TerminalConfig config;
+    [SerializeField] private PromptConfig promptConfig;
+
+    [Header("Font Settings")]
+    [SerializeField] private TMP_FontAsset nerdFontAsset;
 
     private TerminalInputHandler inputHandler;
     private TerminalOutputHandler outputHandler;
@@ -17,9 +21,21 @@ public class TerminalController : MonoBehaviour
 
     private void Awake()
     {
-        outputHandler = new TerminalOutputHandler(outputText, scrollRect);
-        history = new TerminalHistory();
+        // Apply the Nerd Font to text components
+        if (nerdFontAsset != null)
+        {
+            outputText.font = nerdFontAsset;
+
+            // Also apply to the input field text
+            if (inputField.textComponent != null)
+            {
+                inputField.textComponent.font = nerdFontAsset;
+            }
+        }
+
         commandProcessor = new CommandProcessor();
+        outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor);
+        history = new TerminalHistory();
         inputHandler = new TerminalInputHandler(inputField, history, ProcessCommand);
     }
 

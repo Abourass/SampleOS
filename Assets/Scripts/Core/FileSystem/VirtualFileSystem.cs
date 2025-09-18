@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using System.IO; 
 
 public class VirtualFileSystem
 {
@@ -114,5 +115,79 @@ public class VirtualFileSystem
     path.Append(node.Name);
   }
 
-  // Additional methods for file/directory operations...
+  /// <summary>
+  /// Creates a new directory at the specified path
+  /// </summary>
+  /// <param name="path">Path where to create the directory</param>
+  /// <returns>Result indicating success or failure</returns>
+  public Result<bool> CreateDirectory(string path)
+  {
+      // Handle root directory creation as a special case
+      if (path == "/")
+          return Result<bool>.Failure("Cannot create root directory");
+          
+      // Extract parent path and directory name
+      string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
+      string dirName = Path.GetFileName(path);
+      
+      if (string.IsNullOrEmpty(dirName))
+          return Result<bool>.Failure("Invalid directory name");
+          
+      // Find the parent node
+      VirtualNode parentNode = ResolvePath(parentPath);
+      if (parentNode == null)
+          return Result<bool>.Failure($"Parent directory not found: {parentPath}");
+          
+      if (!parentNode.IsDirectory)
+          return Result<bool>.Failure($"Not a directory: {parentPath}");
+          
+      // Check if directory already exists
+      if (parentNode.Children.ContainsKey(dirName))
+          return Result<bool>.Failure($"Directory already exists: {path}");
+          
+      // Create the new directory
+      VirtualNode newDir = new VirtualNode(dirName, true);
+      parentNode.AddChild(newDir);
+      return Result<bool>.Success(true);
+  }
+    
+  /// <summary>
+  /// Creates a new file at the specified path with the given content
+  /// </summary>
+  /// <param name="path">Path where to create the file</param>
+  /// <param name="content">Content to write to the file</param>
+  /// <returns>Result indicating success or failure</returns>
+  public Result<bool> CreateFile(string path, string content)
+  {
+      // Extract parent path and file name
+      string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
+      string fileName = Path.GetFileName(path);
+      
+      if (string.IsNullOrEmpty(fileName))
+          return Result<bool>.Failure("Invalid file name");
+          
+      // Find the parent node
+      VirtualNode parentNode = ResolvePath(parentPath);
+      if (parentNode == null)
+          return Result<bool>.Failure($"Directory not found: {parentPath}");
+          
+      if (!parentNode.IsDirectory)
+          return Result<bool>.Failure($"Not a directory: {parentPath}");
+          
+      // Check if file already exists, update it if it does
+      if (parentNode.Children.TryGetValue(fileName, out VirtualNode existingNode))
+      {
+          if (existingNode.IsDirectory)
+              return Result<bool>.Failure($"Cannot create file, directory exists: {path}");
+              
+          existingNode.Content = content;
+          existingNode.UpdateModificationTime();
+          return Result<bool>.Success(true);
+      }
+      
+      // Create the new file
+      VirtualNode newFile = new VirtualNode(fileName, false, content);
+      parentNode.AddChild(newFile);
+      return Result<bool>.Success(true);
+  }
 }

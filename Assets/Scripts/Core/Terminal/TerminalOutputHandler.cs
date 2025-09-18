@@ -12,14 +12,18 @@ public class TerminalOutputHandler : ITerminalOutput
   private ScrollRect scrollRect;
   private Color currentColor = Color.white;
   private const string DEFAULT_PROMPT = "> ";
+  private PromptConfig promptConfig;
+  private CommandProcessor commandProcessor;
 
   // Maximum number of lines to keep in the terminal (for performance)
   private const int MAX_LINES = 1000;
 
-  public TerminalOutputHandler(TMP_Text outputText, ScrollRect scrollRect)
+  public TerminalOutputHandler(TMP_Text outputText, ScrollRect scrollRect, PromptConfig config, CommandProcessor cmdProcessor)
   {
     this.outputText = outputText;
     this.scrollRect = scrollRect;
+    this.promptConfig = config;
+    this.commandProcessor = cmdProcessor;
   }
 
   /// <summary>
@@ -57,7 +61,59 @@ public class TerminalOutputHandler : ITerminalOutput
   /// </summary>
   public void DisplayPrompt(string path)
   {
-    AppendText($"{path}{DEFAULT_PROMPT}");
+    if (promptConfig != null && promptConfig.enablePowerline)
+    {
+      PowerlinePrompt powerline = new PowerlinePrompt();
+      powerline.SetPromptColor(promptConfig.promptColor);
+
+      // Add status badge if enabled
+      if (promptConfig.showStatusBadge && commandProcessor != null)
+      {
+        bool lastCommandSucceeded = commandProcessor.LastCommandSucceeded;
+        powerline.AddBadge(
+            lastCommandSucceeded ? "✓" : "✗",
+            lastCommandSucceeded ? promptConfig.successBackground : promptConfig.failureBackground,
+            Color.white
+        );
+      }
+
+      // Add user badge if enabled
+      if (promptConfig.showUserBadge)
+      {
+        powerline.AddBadge(
+            PowerlinePrompt.CreateUserBadge(System.Environment.UserName)
+        );
+      }
+
+      // Add directory badge if enabled
+      if (promptConfig.showDirectoryBadge)
+      {
+        // Get just the last part of the path for cleaner display
+        string dirName = System.IO.Path.GetFileName(path);
+        if (string.IsNullOrEmpty(dirName)) dirName = path;
+
+        powerline.AddBadge(
+            PowerlinePrompt.CreateDirectoryBadge(dirName)
+        );
+      }
+
+      // Add time badge if enabled
+      if (promptConfig.showTimeBadge)
+      {
+        powerline.AddBadge(
+            PowerlinePrompt.CreateTimeBadge()
+        );
+      }
+
+      // Generate and display the prompt
+      string prompt = powerline.Generate(promptConfig.promptSymbol);
+      AppendText(prompt);
+    }
+    else
+    {
+      // Fall back to the simple prompt style
+      AppendText($"{path}{DEFAULT_PROMPT}");
+    }
   }
 
   /// <summary>

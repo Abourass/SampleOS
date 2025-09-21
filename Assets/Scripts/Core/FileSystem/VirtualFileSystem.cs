@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Text;
-using System.IO; 
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Linq;
 
 public class VirtualFileSystem
 {
@@ -122,35 +124,35 @@ public class VirtualFileSystem
   /// <returns>Result indicating success or failure</returns>
   public Result<bool> CreateDirectory(string path)
   {
-      // Handle root directory creation as a special case
-      if (path == "/")
-          return Result<bool>.Failure("Cannot create root directory");
-          
-      // Extract parent path and directory name
-      string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
-      string dirName = Path.GetFileName(path);
-      
-      if (string.IsNullOrEmpty(dirName))
-          return Result<bool>.Failure("Invalid directory name");
-          
-      // Find the parent node
-      VirtualNode parentNode = ResolvePath(parentPath);
-      if (parentNode == null)
-          return Result<bool>.Failure($"Parent directory not found: {parentPath}");
-          
-      if (!parentNode.IsDirectory)
-          return Result<bool>.Failure($"Not a directory: {parentPath}");
-          
-      // Check if directory already exists
-      if (parentNode.Children.ContainsKey(dirName))
-          return Result<bool>.Failure($"Directory already exists: {path}");
-          
-      // Create the new directory
-      VirtualNode newDir = new VirtualNode(dirName, true);
-      parentNode.AddChild(newDir);
-      return Result<bool>.Success(true);
+    // Handle root directory creation as a special case
+    if (path == "/")
+      return Result<bool>.Failure("Cannot create root directory");
+
+    // Extract parent path and directory name
+    string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
+    string dirName = Path.GetFileName(path);
+
+    if (string.IsNullOrEmpty(dirName))
+      return Result<bool>.Failure("Invalid directory name");
+
+    // Find the parent node
+    VirtualNode parentNode = ResolvePath(parentPath);
+    if (parentNode == null)
+      return Result<bool>.Failure($"Parent directory not found: {parentPath}");
+
+    if (!parentNode.IsDirectory)
+      return Result<bool>.Failure($"Not a directory: {parentPath}");
+
+    // Check if directory already exists
+    if (parentNode.Children.ContainsKey(dirName))
+      return Result<bool>.Failure($"Directory already exists: {path}");
+
+    // Create the new directory
+    VirtualNode newDir = new VirtualNode(dirName, true);
+    parentNode.AddChild(newDir);
+    return Result<bool>.Success(true);
   }
-    
+
   /// <summary>
   /// Creates a new file at the specified path with the given content
   /// </summary>
@@ -159,35 +161,158 @@ public class VirtualFileSystem
   /// <returns>Result indicating success or failure</returns>
   public Result<bool> CreateFile(string path, string content)
   {
-      // Extract parent path and file name
-      string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
-      string fileName = Path.GetFileName(path);
-      
-      if (string.IsNullOrEmpty(fileName))
-          return Result<bool>.Failure("Invalid file name");
-          
-      // Find the parent node
-      VirtualNode parentNode = ResolvePath(parentPath);
-      if (parentNode == null)
-          return Result<bool>.Failure($"Directory not found: {parentPath}");
-          
-      if (!parentNode.IsDirectory)
-          return Result<bool>.Failure($"Not a directory: {parentPath}");
-          
-      // Check if file already exists, update it if it does
-      if (parentNode.Children.TryGetValue(fileName, out VirtualNode existingNode))
-      {
-          if (existingNode.IsDirectory)
-              return Result<bool>.Failure($"Cannot create file, directory exists: {path}");
-              
-          existingNode.Content = content;
-          existingNode.UpdateModificationTime();
-          return Result<bool>.Success(true);
-      }
-      
-      // Create the new file
-      VirtualNode newFile = new VirtualNode(fileName, false, content);
-      parentNode.AddChild(newFile);
+    // Extract parent path and file name
+    string parentPath = Path.GetDirectoryName(path).Replace('\\', '/');
+    string fileName = Path.GetFileName(path);
+
+    if (string.IsNullOrEmpty(fileName))
+      return Result<bool>.Failure("Invalid file name");
+
+    // Find the parent node
+    VirtualNode parentNode = ResolvePath(parentPath);
+    if (parentNode == null)
+      return Result<bool>.Failure($"Directory not found: {parentPath}");
+
+    if (!parentNode.IsDirectory)
+      return Result<bool>.Failure($"Not a directory: {parentPath}");
+
+    // Check if file already exists, update it if it does
+    if (parentNode.Children.TryGetValue(fileName, out VirtualNode existingNode))
+    {
+      if (existingNode.IsDirectory)
+        return Result<bool>.Failure($"Cannot create file, directory exists: {path}");
+
+      existingNode.Content = content;
+      existingNode.UpdateModificationTime();
       return Result<bool>.Success(true);
+    }
+
+    // Create the new file
+    VirtualNode newFile = new VirtualNode(fileName, false, content);
+    parentNode.AddChild(newFile);
+    return Result<bool>.Success(true);
+  }
+
+  /// <summary>
+  /// Finds files and directories that match the specified glob pattern
+  /// </summary>
+  /// <param name="pattern">The glob pattern to match against (e.g., "*.txt", "doc*", "?.md")</param>
+  /// <param name="startPath">The directory to start the search from (defaults to current directory)</param>
+  /// <param name="recursive">Whether to search recursively through subdirectories</param>
+  /// <returns>A list of nodes matching the pattern</returns>
+  public Result<List<VirtualNode>> FindByPattern(string pattern, string startPath = null, bool recursive = true)
+  {
+    if (string.IsNullOrEmpty(pattern))
+      return Result<List<VirtualNode>>.Failure("Pattern cannot be empty");
+
+    // Default to current directory if no start path is provided
+    startPath = startPath ?? CurrentPath;
+
+    // Get the starting node
+    VirtualNode startNode = ResolvePath(startPath);
+    if (startNode == null)
+      return Result<List<VirtualNode>>.Failure($"Directory not found: {startPath}");
+
+    if (!startNode.IsDirectory)
+      return Result<List<VirtualNode>>.Failure($"Not a directory: {startPath}");
+
+    // Convert the glob pattern to a regex pattern
+    string regexPattern = GlobToRegex(pattern);
+    Regex regex = new Regex(regexPattern, RegexOptions.IgnoreCase);
+
+    // Find matching nodes
+    List<VirtualNode> results = new List<VirtualNode>();
+    FindMatchingNodes(startNode, regex, results, recursive);
+
+    return Result<List<VirtualNode>>.Success(results);
+  }
+
+  /// <summary>
+  /// Finds only files (not directories) that match the specified glob pattern
+  /// </summary>
+  /// <param name="pattern">The glob pattern to match against (e.g., "*.txt", "doc*", "?.md")</param>
+  /// <param name="startPath">The directory to start the search from (defaults to current directory)</param>
+  /// <param name="recursive">Whether to search recursively through subdirectories</param>
+  /// <returns>A list of file nodes matching the pattern</returns>
+  public Result<List<VirtualNode>> FindFilesByPattern(string pattern, string startPath = null, bool recursive = true)
+  {
+    // Use the existing FindByPattern method to get all matching nodes
+    var allMatchesResult = FindByPattern(pattern, startPath, recursive);
+
+    if (!allMatchesResult.IsSuccess)
+      return Result<List<VirtualNode>>.Failure(allMatchesResult.ErrorMessage);
+
+    // Filter the results to only include files
+    var files = allMatchesResult.Data.Where(node => !node.IsDirectory).ToList();
+
+    return Result<List<VirtualNode>>.Success(files);
+  }
+
+  /// <summary>
+  /// Recursively finds nodes that match the pattern
+  /// </summary>
+  private void FindMatchingNodes(VirtualNode currentNode, Regex pattern, List<VirtualNode> results, bool recursive)
+  {
+    foreach (var child in currentNode.Children.Values)
+    {
+      // Check if the child's name matches the pattern
+      if (pattern.IsMatch(child.Name))
+      {
+        results.Add(child);
+      }
+
+      // If recursive and the child is a directory, search it too
+      if (recursive && child.IsDirectory)
+      {
+        FindMatchingNodes(child, pattern, results, recursive);
+      }
+    }
+  }
+
+  /// <summary>
+  /// Converts a glob pattern to a regex pattern
+  /// </summary>
+  /// <param name="glob">The glob pattern</param>
+  /// <returns>Equivalent regex pattern</returns>
+  private string GlobToRegex(string glob)
+  {
+    StringBuilder regex = new StringBuilder("^");
+
+    foreach (char c in glob)
+    {
+      switch (c)
+      {
+        case '*':
+          regex.Append(".*");
+          break;
+        case '?':
+          regex.Append(".");
+          break;
+        case '.':
+          regex.Append("\\.");
+          break;
+        case '\\':
+          regex.Append("\\\\");
+          break;
+        case '[':
+        case ']':
+        case '(':
+        case ')':
+        case '{':
+        case '}':
+        case '+':
+        case '^':
+        case '$':
+        case '|':
+          regex.Append('\\').Append(c);
+          break;
+        default:
+          regex.Append(c);
+          break;
+      }
+    }
+
+    regex.Append("$");
+    return regex.ToString();
   }
 }

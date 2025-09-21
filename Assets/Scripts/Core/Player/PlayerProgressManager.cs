@@ -6,17 +6,34 @@ public class PlayerProgressManager
 {
   private HashSet<string> compromisedSystems = new HashSet<string>();
   private Dictionary<string, HashSet<string>> discoveredVulnerabilities = new Dictionary<string, HashSet<string>>();
-  private VirtualNetwork network;
+  private Dictionary<string, int> networkAccessLevels = new Dictionary<string, int>();
+  private VirtualNetwork currentNetwork;
 
   public PlayerProgressManager(VirtualNetwork network)
   {
-    this.network = network;
+    this.currentNetwork = network;
     LoadProgress();
+  }
+
+  public void SetNetwork(VirtualNetwork network)
+  {
+    this.currentNetwork = network;
   }
 
   public void AddCompromisedSystem(string hostname)
   {
     compromisedSystems.Add(hostname);
+
+    // If this system is in current network, increase network access level
+    if (currentNetwork != null)
+    {
+      var system = currentNetwork.GetSystemByHostname(hostname);
+      if (system != null)
+      {
+        IncreaseNetworkAccessLevel(currentNetwork.NetworkId);
+      }
+    }
+
     SaveProgress();
   }
 
@@ -36,7 +53,7 @@ public class PlayerProgressManager
     {
       discoveredVulnerabilities[hostname] = new HashSet<string>();
     }
-    
+
     discoveredVulnerabilities[hostname].Add(cve);
     SaveProgress();
   }
@@ -50,13 +67,35 @@ public class PlayerProgressManager
     return new List<string>();
   }
 
+  public int GetNetworkAccessLevel(string networkId)
+  {
+    if (networkAccessLevels.TryGetValue(networkId, out int level))
+      return level;
+    return 0;
+  }
+
+  public void IncreaseNetworkAccessLevel(string networkId)
+  {
+    if (!networkAccessLevels.ContainsKey(networkId))
+      networkAccessLevels[networkId] = 0;
+
+    networkAccessLevels[networkId]++;
+    SaveProgress();
+  }
+
+  public Dictionary<string, int> GetAllNetworkAccessLevels()
+  {
+    return new Dictionary<string, int>(networkAccessLevels);
+  }
+
   private void SaveProgress()
   {
     // Create data structure to save
     var saveData = new SaveData
     {
       CompromisedSystems = new List<string>(compromisedSystems),
-      DiscoveredVulnerabilities = new Dictionary<string, List<string>>()
+      DiscoveredVulnerabilities = new Dictionary<string, List<string>>(),
+      NetworkAccessLevels = new Dictionary<string, int>(networkAccessLevels)
     };
 
     foreach (var entry in discoveredVulnerabilities)
@@ -66,7 +105,7 @@ public class PlayerProgressManager
 
     // Convert to JSON
     string json = JsonUtility.ToJson(saveData);
-    
+
     // Save to PlayerPrefs for simplicity
     PlayerPrefs.SetString("HackingProgress", json);
     PlayerPrefs.Save();
@@ -78,14 +117,16 @@ public class PlayerProgressManager
     {
       string json = PlayerPrefs.GetString("HackingProgress");
       var saveData = JsonUtility.FromJson<SaveData>(json);
-      
+
       compromisedSystems = new HashSet<string>(saveData.CompromisedSystems);
       discoveredVulnerabilities = new Dictionary<string, HashSet<string>>();
-      
+
       foreach (var entry in saveData.DiscoveredVulnerabilities)
       {
         discoveredVulnerabilities[entry.Key] = new HashSet<string>(entry.Value);
       }
+
+      networkAccessLevels = new Dictionary<string, int>(saveData.NetworkAccessLevels);
     }
   }
 
@@ -95,5 +136,6 @@ public class PlayerProgressManager
   {
     public List<string> CompromisedSystems;
     public Dictionary<string, List<string>> DiscoveredVulnerabilities;
+    public Dictionary<string, int> NetworkAccessLevels;
   }
 }

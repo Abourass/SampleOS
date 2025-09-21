@@ -1,12 +1,46 @@
 using System.Collections.Generic;
+using System.Linq;
+using Core.Networking.Access;
+
+public class NetworkMetadata
+{
+  public string Name { get; set; }
+  public string Description { get; set; }
+  public string Organization { get; set; }
+  public NetworkType Type { get; set; }
+  public string IPRange { get; set; }
+  public List<string> ConnectedNetworks { get; set; } = new List<string>();
+}
+
+public enum NetworkType
+{
+  Corporate,      // Company internal networks
+  Government,     // Municipal, federal networks
+  Residential,    // Home networks, small business
+  Educational,    // Universities, schools
+  Healthcare,     // Hospitals, clinics
+  Financial,      // Banks, credit unions
+  Criminal,       // Underground, illegal operations
+  ISP,           // Internet service providers
+  Industrial     // Manufacturing, utilities
+}
 
 public class VirtualNetwork
 {
   private Dictionary<string, RemoteSystem> systems = new Dictionary<string, RemoteSystem>();
   private RemoteSystem localSystem;
+  public NetworkMetadata Metadata { get; private set; }
+  public string NetworkId { get; private set; }
+  public List<NetworkGateway> Gateways { get; private set; } = new List<NetworkGateway>();
+  public NetworkSecurityProfile SecurityProfile { get; private set; }
 
-  public VirtualNetwork()
+  public VirtualNetwork(string id, NetworkMetadata metadata, NetworkSecurityProfile security)
   {
+    // Create network information
+    NetworkId = id;
+    Metadata = metadata;
+    SecurityProfile = security;
+
     // Create local system with high security
     localSystem = new RemoteSystem("localhost", "localhost", "127.0.0.1", "desktop", "user", SecurityLevel.High);
 
@@ -111,5 +145,21 @@ public class VirtualNetwork
     }
 
     return devices;
+  }
+
+  public void AddGateway(NetworkGateway gateway)
+  {
+    Gateways.Add(gateway);
+  }
+
+  public void AddSystem(string systemId, RemoteSystem system)
+  {
+    // Add or replace the system with this ID
+    systems[systemId] = system;
+  }
+
+  public List<RemoteSystem> GetGatewaySystems()
+  {
+    return Gateways.Where(g => g.IsActive).Select(g => GetSystemByHostname(g.SystemHostname)).ToList();
   }
 }

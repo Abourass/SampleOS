@@ -15,15 +15,19 @@ public class TerminalOutputHandler : ITerminalOutput
   private PromptConfig promptConfig;
   private CommandProcessor commandProcessor;
 
+  // Reference to a MonoBehaviour for starting coroutines
+  private MonoBehaviour coroutineRunner;
+
   // Maximum number of lines to keep in the terminal (for performance)
   private const int MAX_LINES = 1000;
 
-  public TerminalOutputHandler(TMP_Text outputText, ScrollRect scrollRect, PromptConfig config, CommandProcessor cmdProcessor)
+  public TerminalOutputHandler(TMP_Text outputText, ScrollRect scrollRect, PromptConfig config, CommandProcessor cmdProcessor, MonoBehaviour coroutineRunner)
   {
     this.outputText = outputText;
     this.scrollRect = scrollRect;
     this.promptConfig = config;
     this.commandProcessor = cmdProcessor;
+    this.coroutineRunner = coroutineRunner;
   }
 
   /// <summary>
@@ -137,17 +141,46 @@ public class TerminalOutputHandler : ITerminalOutput
   /// </summary>
   private void ScrollToBottom()
   {
-    // Defer scrolling to the next frame to ensure layout has been updated
-    if (scrollRect != null)
+    if (scrollRect == null) return;
+
+    if (coroutineRunner != null && coroutineRunner.gameObject.activeInHierarchy)
     {
-      // Use Unity's coroutine system via MonoBehaviour.StartCoroutine
-      if (outputText.gameObject.activeInHierarchy)
-      {
-        // Can't use StartCoroutine directly, so we'll use Canvas.ForceUpdateCanvases
-        Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
-      }
+      coroutineRunner.StartCoroutine(ScrollToBottomCoroutine());
     }
+    else
+    {
+      // Fallback if coroutine runner isn't available
+      Canvas.ForceUpdateCanvases();
+      scrollRect.verticalNormalizedPosition = 0f;
+    }
+  }
+
+  /// <summary>
+  /// Coroutine to scroll to the bottom of the content after layout updates
+  /// </summary>
+  private IEnumerator ScrollToBottomCoroutine()
+  {
+    // Wait for end of frame to ensure all layout calculations are done
+    yield return new WaitForEndOfFrame();
+
+    // Force the canvas to update
+    Canvas.ForceUpdateCanvases();
+
+    // Ensure the layout group has updated
+    if (outputText.transform.parent.GetComponent<LayoutGroup>() != null)
+    {
+      LayoutRebuilder.ForceRebuildLayoutImmediate(outputText.transform.parent as RectTransform);
+    }
+
+    // Another frame to be extra safe
+    yield return null;
+
+    // Scroll to bottom (0 = bottom, 1 = top for vertical scroll)
+    scrollRect.verticalNormalizedPosition = 0f;
+
+    // One more update for good measure
+    yield return null;
+    scrollRect.verticalNormalizedPosition = 0f;
   }
 
   /// <summary>

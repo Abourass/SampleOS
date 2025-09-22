@@ -43,6 +43,8 @@ public class CommandProcessor
     RegisterCommand(new ClearCommand());
     RegisterCommand(new AliasCommand(aliases));
     RegisterCommand(new OwnedCommand(progressManager, network));
+
+    RegisterCommand(new QuitCommand(progressManager));
   }
 
   public void ProcessCommand(string input, ITerminalOutput output)

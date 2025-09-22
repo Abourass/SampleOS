@@ -11,6 +11,12 @@ public class CommandProcessor
   private PlayerProgressManager progressManager;
   private VirtualCity city;
   private PlayerCredentialManager credentialManager;
+  private IInteractiveCommand pendingCommand;
+  /// <summary>
+  /// Whether there's a command waiting for user input
+  /// </summary>
+  public bool IsWaitingForCommandInput => pendingCommand != null && pendingCommand.IsWaitingForInput;
+
   public bool LastCommandSucceeded { get; private set; } = true;
 
   public CommandProcessor()
@@ -49,6 +55,21 @@ public class CommandProcessor
 
   public void ProcessCommand(string input, ITerminalOutput output)
   {
+    // If we're waiting for input for an interactive command, route input there
+    if (IsWaitingForCommandInput)
+    {
+      pendingCommand.ProcessInput(input, output);
+
+      // If command is done waiting for input, clear pending state
+      if (!pendingCommand.IsWaitingForInput)
+      {
+        pendingCommand = null;
+      }
+
+      LastCommandSucceeded = true;
+      return;
+    }
+
     string[] parts = input.Trim().Split(' ');
     if (parts.Length == 0) return;
 
@@ -85,6 +106,13 @@ public class CommandProcessor
       try
       {
         command.Execute(args, output);
+
+        // Check if this is an interactive command now waiting for input
+        if (command is IInteractiveCommand interactiveCommand && interactiveCommand.IsWaitingForInput)
+        {
+          pendingCommand = interactiveCommand;
+        }
+
         LastCommandSucceeded = true;
       }
       catch (System.Exception ex)

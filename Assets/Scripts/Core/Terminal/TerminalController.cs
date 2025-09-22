@@ -55,7 +55,11 @@ public class TerminalController : MonoBehaviour
     {
         outputHandler.AppendText(input + "\n");
         commandProcessor.ProcessCommand(input, outputHandler);
-        outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
+        // Only display the standard prompt if we're not waiting for command input
+        if (!commandProcessor.IsWaitingForCommandInput)
+        {
+            outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
+        }
         inputHandler.FocusInput();
     }
 }

@@ -36,6 +36,7 @@ public class CommandProcessor
     RegisterCommand(new CatCommand(fileSystem));
     RegisterCommand(new GrepCommand(fileSystem));
     RegisterCommand(new WcCommand(fileSystem));
+    RegisterCommand(new GumCommand(fileSystem));
     // Networking Commands
     RegisterCommand(new SshCommand(network, this));
     RegisterCommand(new NetstatCommand(network));

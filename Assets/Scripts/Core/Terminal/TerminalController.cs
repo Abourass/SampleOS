@@ -10,11 +10,11 @@ public class TerminalController : MonoBehaviour
     [SerializeField] private ScrollRect scrollRect;
     [SerializeField] private TerminalConfig config;
     [SerializeField] private PromptConfig promptConfig;
+    [SerializeField] private TerminalInputHandler inputHandler;  // Now serialized
 
     [Header("Font Settings")]
     [SerializeField] private TMP_FontAsset nerdFontAsset;
 
-    private TerminalInputHandler inputHandler;
     private TerminalOutputHandler outputHandler;
     private TerminalHistory history;
     private CommandProcessor commandProcessor;
@@ -36,7 +36,15 @@ public class TerminalController : MonoBehaviour
         commandProcessor = new CommandProcessor();
         outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor, this);
         history = new TerminalHistory();
-        inputHandler = new TerminalInputHandler(inputField, history, ProcessCommand);
+        
+        // Initialize the input handler with the required references
+        if (inputHandler == null)
+        {
+            Debug.LogError("TerminalInputHandler reference is missing!");
+            return;
+        }
+        
+        inputHandler.Initialize(history, ProcessCommand, commandProcessor);
     }
 
     private void Start()
@@ -53,13 +61,21 @@ public class TerminalController : MonoBehaviour
 
     private void ProcessCommand(string input)
     {
-        outputHandler.AppendText(input + "\n");
+        // Don't echo navigation commands from interactive mode
+        if (!commandProcessor.IsWaitingForCommandInput || 
+            (input != "up" && input != "down" && input != "enter" && input != "escape"))
+        {
+            outputHandler.AppendText(input + "\n");
+        }
+        
         commandProcessor.ProcessCommand(input, outputHandler);
+        
         // Only display the standard prompt if we're not waiting for command input
         if (!commandProcessor.IsWaitingForCommandInput)
         {
             outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
         }
+        
         inputHandler.FocusInput();
     }
 }

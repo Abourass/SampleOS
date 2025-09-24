@@ -8,6 +8,7 @@ public class TerminalController : MonoBehaviour
     [SerializeField] private TMP_Text outputText;
     [SerializeField] private TMP_InputField inputField;
     [SerializeField] private ScrollRect scrollRect;
+    [SerializeField] private VerticalLayoutGroup content;
     [SerializeField] private TerminalConfig config;
     [SerializeField] private PromptConfig promptConfig;
 
@@ -34,7 +35,7 @@ public class TerminalController : MonoBehaviour
         }
 
         commandProcessor = new CommandProcessor();
-        outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor, this);
+        outputHandler = new TerminalOutputHandler(outputText, scrollRect, content, promptConfig, commandProcessor, this);
         history = new TerminalHistory();
         inputHandler = new TerminalInputHandler(inputField, history, ProcessCommand);
     }

@@ -424,6 +424,7 @@ MonoBehaviour:
   outputText: {fileID: 1533172647}
   inputField: {fileID: 1967324676}
   scrollRect: {fileID: 1411066010}
+  content: {fileID: 38875725}
   config: {fileID: 11400000, guid: 8b4611e7ab14222e58f0161878ad0f41, type: 2}
   promptConfig: {fileID: 11400000, guid: c2b720f20b46060dd84746b28a6e7b7c, type: 2}
   nerdFontAsset: {fileID: 11400000, guid: 81fe9f83a38fa34a2ae7ef163fac56d8, type: 2}

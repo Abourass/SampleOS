@@ -273,6 +273,11 @@ public class CommandProcessor
     }
   }
 
+  public VirtualFileSystem GetFileSystem()
+  {
+      return fileSystem;
+  }
+
   public RemoteSystem GetCurrentSystem()
   {
     return currentSystem;

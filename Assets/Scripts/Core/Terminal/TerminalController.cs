@@ -37,7 +37,7 @@ public class TerminalController : MonoBehaviour
         commandProcessor = new CommandProcessor();
         
         // Get file system reference from command processor
-        fileSystem = GetFileSystemFromCommandProcessor();
+        fileSystem = commandProcessor.GetFileSystem();
         
         outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor, this);
         history = new TerminalHistory();
@@ -76,7 +76,7 @@ public class TerminalController : MonoBehaviour
         commandProcessor.ProcessCommand(input, outputHandler);
         
         // Update file system reference in input handler if it changed (e.g., SSH)
-        var currentFileSystem = GetFileSystemFromCommandProcessor();
+        var currentFileSystem = commandProcessor.GetFileSystem();
         if (currentFileSystem != fileSystem)
         {
             fileSystem = currentFileSystem;
@@ -90,21 +90,5 @@ public class TerminalController : MonoBehaviour
         }
         
         inputHandler.FocusInput();
-    }
-
-    /// <summary>
-    /// Gets the current file system from the command processor
-    /// This is a workaround since VirtualFileSystem isn't directly exposed
-    /// </summary>
-    private VirtualFileSystem GetFileSystemFromCommandProcessor()
-    {
-        // Since we can't directly access the file system from CommandProcessor,
-        // we'll use reflection or create a method to expose it
-        // For now, we'll create a new instance - you may want to modify CommandProcessor
-        // to expose the file system properly
-        
-        // This is a temporary solution - ideally CommandProcessor should expose GetFileSystem()
-        var fs = new VirtualFileSystem();
-        return fs;
     }
 }

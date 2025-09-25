@@ -251,7 +251,20 @@ namespace Core.Networking.Discovery
 
     public override string GetDisplayString()
     {
-      return $"API: {BaseURL} (Key: {APIKey?.Substring(0, 8)}...)";
+      string keyDisplay;
+      if (string.IsNullOrEmpty(APIKey))
+      {
+        keyDisplay = "N/A";
+      }
+      else if (APIKey.Length < 8)
+      {
+        keyDisplay = APIKey;
+      }
+      else
+      {
+        keyDisplay = APIKey.Substring(0, 8) + "...";
+      }
+      return $"API: {BaseURL} (Key: {keyDisplay})";
     }
   }
 }

@@ -350,16 +350,25 @@ namespace Core.Networking.Discovery
 
     private bool IsPrivateIP(string ip)
     {
-      var parts = ip.Split('.').Select(int.Parse).ToArray();
+      var parts = ip.Split('.');
+      if (parts.Length != 4)
+        return false;
+
+      int[] octets = new int[4];
+      for (int i = 0; i < 4; i++)
+      {
+        if (!int.TryParse(parts[i], out octets[i]) || octets[i] < 0 || octets[i] > 255)
+          return false;
+      }
 
       // 10.0.0.0/8
-      if (parts[0] == 10) return true;
+      if (octets[0] == 10) return true;
 
       // 172.16.0.0/12
-      if (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+      if (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31) return true;
 
       // 192.168.0.0/16
-      if (parts[0] == 192 && parts[1] == 168) return true;
+      if (octets[0] == 192 && octets[1] == 168) return true;
 
       return false;
     }

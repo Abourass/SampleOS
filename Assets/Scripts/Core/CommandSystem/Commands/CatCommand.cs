@@ -1,4 +1,4 @@
-public class CatCommand : ICommand, IFileSystemCommand
+public class CatCommand : ICommand, IFileSystemCommand, IPipeableCommand
 {
   private VirtualFileSystem fileSystem;
 
@@ -38,6 +38,19 @@ public class CatCommand : ICommand, IFileSystemCommand
       // Display the file content
       output.AppendText($"{fileNode.Content}\n");
     }
+  }
+
+  public void ExecuteWithInput(string[] args, ITerminalOutput output, string inputText)
+  {
+    // If args provided, behave like normal cat with files
+    if (args.Length > 0)
+    {
+      Execute(args, output);
+      return;
+    }
+    
+    // If no args, just output the piped input
+    output.AppendText(inputText);
   }
 
   public void SetFileSystem(VirtualFileSystem fs)

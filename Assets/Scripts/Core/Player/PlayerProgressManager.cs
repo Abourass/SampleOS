@@ -88,7 +88,7 @@ public class PlayerProgressManager
     return new Dictionary<string, int>(networkAccessLevels);
   }
 
-  private void SaveProgress()
+  public void SaveProgress()
   {
     // Create data structure to save
     var saveData = new SaveData

@@ -9,12 +9,16 @@ public class CommandProcessor
   private RemoteSystem currentSystem;
   private PlayerVulnerabilityInventory vulnerabilityInventory;
   private PlayerProgressManager progressManager;
+  private VirtualCity city;
+  private PlayerCredentialManager credentialManager;
   public bool LastCommandSucceeded { get; private set; } = true;
 
   public CommandProcessor()
   {
     fileSystem = new VirtualFileSystem();
-    network = new VirtualNetwork();
+    city = new VirtualCity();
+    network = city.CurrentNetwork;
+    credentialManager = new PlayerCredentialManager();
     vulnerabilityInventory = new PlayerVulnerabilityInventory();
     progressManager = new PlayerProgressManager(network);
 
@@ -24,9 +28,13 @@ public class CommandProcessor
     RegisterCommand(new MkdirCommand(fileSystem));
     RegisterCommand(new TouchCommand(fileSystem));
     RegisterCommand(new CatCommand(fileSystem));
+    // Networking Commands
     RegisterCommand(new SshCommand(network, this));
     RegisterCommand(new NetstatCommand(network));
     RegisterCommand(new NmapCommand(network));
+    RegisterCommand(new NetworksCommand(city));
+    RegisterCommand(new VpnConnectCommand(city, credentialManager));
+
     RegisterCommand(new PsCommand(this));
     RegisterCommand(new VulnScanCommand(network, vulnerabilityInventory));
     RegisterCommand(new VulnsCommand(vulnerabilityInventory));
@@ -121,5 +129,10 @@ public class CommandProcessor
   public void SetCurrentSystem(RemoteSystem system)
   {
     currentSystem = system;
+  }
+
+  public void UpdateCurrentNetwork()
+  {
+    network = city.CurrentNetwork;
   }
 }

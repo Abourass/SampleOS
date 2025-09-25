@@ -34,7 +34,7 @@ public class TerminalController : MonoBehaviour
         }
 
         commandProcessor = new CommandProcessor();
-        outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor);
+        outputHandler = new TerminalOutputHandler(outputText, scrollRect, promptConfig, commandProcessor, this);
         history = new TerminalHistory();
         inputHandler = new TerminalInputHandler(inputField, history, ProcessCommand);
     }
@@ -53,7 +53,7 @@ public class TerminalController : MonoBehaviour
 
     private void ProcessCommand(string input)
     {
-        outputHandler.AppendText("> " + input + "\n");
+        outputHandler.AppendText(input + "\n");
         commandProcessor.ProcessCommand(input, outputHandler);
         outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
         inputHandler.FocusInput();

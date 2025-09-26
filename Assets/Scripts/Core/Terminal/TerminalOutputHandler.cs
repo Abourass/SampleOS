@@ -207,214 +207,26 @@ public class TerminalOutputHandler : ITerminalOutput
     }
   }
 
-  private void SetPaddingTop() 
-  {
+  private void SetPaddingTop()   //This will need to be customized based on font size and line spacing
+    {
     string text = outputText.text;
     string[] lines = text.Split('\n');
-    //if (lines.Length == 0) 
-    //{
-    //  content.padding.top = -440;
-    //}
-    //else if (lines.Length == 1)
-    //{
-    // content.padding.top = -440;
-    //}
-    //else if (lines.Length == 2)
-    //{
-    //  content.padding.top = -440;
-    //}
-    //else if (lines.Length == 3)
-    //{
-    //  content.padding.top = -440;
-    //}
-    //else if (lines.Length <= 4)
-    //{
-    //  content.padding.top = -440;
-    //}
-    //else if (lines.Length == 5)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 6)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 7)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 8)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 9)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 10)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 11)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 12)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 13)
-    //{
-    //    content.padding.top = -440;
-    //}
-    //else if (lines.Length == 14)
-    //{
-    //    content.padding.top = -440;
-    //}
+
+    int lineHeight = 29;
     if (lines.Length <= 15)
     {
-        content.padding.top = -440;
+      content.padding.top = -440;
     }
-    else if (lines.Length == 16) //start adjusting 6 enters   (29 per line, 58 per pair of lines)
+    else if (lines.Length >= 16 && lines.Length <= 32) 
     {
-        content.padding.top = -408;
-    }
-    else if (lines.Length == 17) 
-    {
-        content.padding.top = -380;
-    }
-    else if (lines.Length == 18) // 7 enters
-    {
-        content.padding.top = -350;
-    }
-    else if (lines.Length == 19)
-    {
-        content.padding.top = -321;
-    }
-    else if (lines.Length == 20)  //8 enters
-        {
-        content.padding.top = -292;
-    }
-    else if (lines.Length == 21)
-    {
-        content.padding.top = -263;
-    }
-    else if (lines.Length == 22) //9 enters
-        {
-        content.padding.top = -234;
-    }
-    else if (lines.Length == 23)
-    {
-        content.padding.top = -205;
-    }
-    else if (lines.Length == 24) //10 enters
-    {
-        content.padding.top = -176;
-    }
-    else if (lines.Length == 25)
-    {
-        content.padding.top = -147;
-    }
-    else if (lines.Length == 26) //11 enters
-    {
-        content.padding.top = -118;
-    }
-    else if (lines.Length == 27)
-    {
-        content.padding.top = -89;
-    }
-    else if (lines.Length == 28) //12 enters
-    {
-        content.padding.top = -60;
-    }
-    else if (lines.Length == 29)
-    {
-        content.padding.top = -31;
-    }
-    else if (lines.Length == 30) //13 enters
-        {
-        content.padding.top = -2;
-    }
-    else if (lines.Length == 31)
-    {
-        content.padding.top = 0;
-    }
-    else if (lines.Length == 32)  //14 enters
-    {
-            content.padding.top = 0; // 56;
+      // Figure out a for loop
+      content.padding.top = -440 + ((lines.Length - 15) * (lineHeight));
     }
     else if (lines.Length >= 33)
     {
-        content.padding.top = 0;
+      content.padding.top = 0;
     }
-    //else if (lines.Length == 34)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 35)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 36)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 37)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 38)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 39)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 40)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 41)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 42)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 43)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 44)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 45)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 46)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 47)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 48)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length == 49)
-    //{
-    //    content.padding.top = 0;
-    //}
-    //else if (lines.Length >= 50) 
-    //{
-    //  content.padding.top = 0;
-    //}
+  
   }
 
 }

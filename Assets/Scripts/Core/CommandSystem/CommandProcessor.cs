@@ -11,7 +11,7 @@ namespace SampleOS.Core.CommandSystem
   /// <summary>
   /// Processes and executes commands, manages command state, aliases, and piping.
   /// </summary>
-  public class CommandProcessor: MonoBehaviour
+  public class CommandProcessor : MonoBehaviour
   {
     private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
     private Dictionary<string, string> aliases = new Dictionary<string, string>();

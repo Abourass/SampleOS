@@ -4,6 +4,7 @@ using TMPro;
 using System;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using SampleOS.Core.CommandSystem;
 
 public class TerminalInputHandler : MonoBehaviour
 {

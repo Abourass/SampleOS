@@ -1,71 +1,75 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using SampleOS.Core.CommandSystem;
 
-public class VulnsCommand : ICommand
+namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
 {
-  private PlayerVulnerabilityInventory vulnerabilityInventory;
-
-  public string Name => "vulns";
-  public string Description => "Display your vulnerability database";
-  public string Usage => "vulns [--sort=severity|date|cve]";
-
-  public VulnsCommand(PlayerVulnerabilityInventory inventory)
+  public class VulnsCommand : ICommand
   {
-    this.vulnerabilityInventory = inventory;
-  }
+    private PlayerVulnerabilityInventory vulnerabilityInventory;
 
-  public void Execute(string[] args, ITerminalOutput output)
-  {
-    // Parse sort option
-    string sortBy = "date"; // default
-    if (args.Length > 0)
+    public string Name => "vulns";
+    public string Description => "Display your vulnerability database";
+    public string Usage => "vulns [--sort=severity|date|cve]";
+
+    public VulnsCommand(PlayerVulnerabilityInventory inventory)
     {
-      foreach (string arg in args)
+      this.vulnerabilityInventory = inventory;
+    }
+
+    public void Execute(string[] args, ITerminalOutput output)
+    {
+      // Parse sort option
+      string sortBy = "date"; // default
+      if (args.Length > 0)
       {
-        if (arg.StartsWith("--sort="))
+        foreach (string arg in args)
         {
-          sortBy = arg.Substring(7).ToLower();
+          if (arg.StartsWith("--sort="))
+          {
+            sortBy = arg.Substring(7).ToLower();
+          }
         }
       }
-    }
 
-    var vulnerabilities = vulnerabilityInventory.GetAllVulnerabilities();
+      var vulnerabilities = vulnerabilityInventory.GetAllVulnerabilities();
 
-    if (vulnerabilities.Count == 0)
-    {
-      output.AppendText("No vulnerabilities in database. Use 'vuln-scan' to find vulnerabilities.\n");
-      return;
-    }
+      if (vulnerabilities.Count == 0)
+      {
+        output.AppendText("No vulnerabilities in database. Use 'vuln-scan' to find vulnerabilities.\n");
+        return;
+      }
 
-    // Sort based on option
-    switch (sortBy)
-    {
-      case "severity":
-        vulnerabilities.Sort((a, b) => b.Vulnerability.Severity.CompareTo(a.Vulnerability.Severity));
-        break;
-      case "cve":
-        vulnerabilities.Sort((a, b) => a.Vulnerability.CVE.CompareTo(b.Vulnerability.CVE));
-        break;
-      case "date":
-      default:
-        vulnerabilities.Sort((a, b) => b.DiscoveryDate.CompareTo(a.DiscoveryDate));
-        break;
-    }
+      // Sort based on option
+      switch (sortBy)
+      {
+        case "severity":
+          vulnerabilities.Sort((a, b) => b.Vulnerability.Severity.CompareTo(a.Vulnerability.Severity));
+          break;
+        case "cve":
+          vulnerabilities.Sort((a, b) => a.Vulnerability.CVE.CompareTo(b.Vulnerability.CVE));
+          break;
+        case "date":
+        default:
+          vulnerabilities.Sort((a, b) => b.DiscoveryDate.CompareTo(a.DiscoveryDate));
+          break;
+      }
 
-    // Display header
-    output.AppendText("VULNERABILITY DATABASE\n");
-    output.AppendText("=====================\n\n");
-    output.AppendText("CVE             | SEVERITY | TARGET           | SOFTWARE        | NAME\n");
-    output.AppendText("----------------+---------+-----------------+----------------+---------------------------\n");
+      // Display header
+      output.AppendText("VULNERABILITY DATABASE\n");
+      output.AppendText("=====================\n\n");
+      output.AppendText("CVE             | SEVERITY | TARGET           | SOFTWARE        | NAME\n");
+      output.AppendText("----------------+---------+-----------------+----------------+---------------------------\n");
 
-    // Display vulnerabilities with clear column separators
-    foreach (var vuln in vulnerabilities)
-    {
-      string target = $"{vuln.HostIP}:{vuln.Port}";
-      output.AppendText(
-          $"{vuln.Vulnerability.CVE,-15} | {vuln.Vulnerability.Severity,-8} | {target,-15} | {vuln.SoftwareName,-14} | {vuln.Vulnerability.Name}\n"
-      );
+      // Display vulnerabilities with clear column separators
+      foreach (var vuln in vulnerabilities)
+      {
+        string target = $"{vuln.HostIP}:{vuln.Port}";
+        output.AppendText(
+            $"{vuln.Vulnerability.CVE,-15} | {vuln.Vulnerability.Severity,-8} | {target,-15} | {vuln.SoftwareName,-14} | {vuln.Vulnerability.Name}\n"
+        );
+      }
     }
   }
 }

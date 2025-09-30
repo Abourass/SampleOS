@@ -39,32 +39,41 @@ namespace SampleOS.Core.CommandSystem
       vulnerabilityInventory = new PlayerVulnerabilityInventory();
       progressManager = new PlayerProgressManager(network);
 
-      // Register commands
+      // -----------------//
+      // Register commands |
+      // -----------------//
+
+      // System Commands
+      RegisterCommand(new AliasCommand(aliases));
+      RegisterCommand(new ClearCommand());
+      RegisterCommand(new HelpCommand(commands));
+      RegisterCommand(new PsCommand(this));
+      RegisterCommand(new QuitCommand(progressManager));
+
+      // File Operation Commands
+      RegisterCommand(new CatCommand(fileSystem));
       RegisterCommand(new CdCommand(fileSystem));
+      RegisterCommand(new GrepCommand(fileSystem));
+      RegisterCommand(new LsCommand(fileSystem));
       RegisterCommand(new MkdirCommand(fileSystem));
       RegisterCommand(new TouchCommand(fileSystem));
-      RegisterCommand(new CatCommand(fileSystem));
-      RegisterCommand(new GrepCommand(fileSystem));
       RegisterCommand(new WcCommand(fileSystem));
+
+      // CLI Commands
       RegisterCommand(new GumCommand(fileSystem));
 
       // Networking Commands
-      RegisterCommand(new SshCommand(network, this));
       RegisterCommand(new NetstatCommand(network));
-      RegisterCommand(new NmapCommand(network));
       RegisterCommand(new NetworksCommand(city));
+      RegisterCommand(new SshCommand(network, this));
+      RegisterCommand(new NmapCommand(network));
+      RegisterCommand(new OwnedCommand(progressManager, network));
       RegisterCommand(new VpnConnectCommand(city, credentialManager));
 
-      RegisterCommand(new PsCommand(this));
+      // Vulnerability Commands
+      RegisterCommand(new ExploitCommand(network, this, vulnerabilityInventory, progressManager));
       RegisterCommand(new VulnScanCommand(network, vulnerabilityInventory));
       RegisterCommand(new VulnsCommand(vulnerabilityInventory));
-      RegisterCommand(new ExploitCommand(network, this, vulnerabilityInventory, progressManager));
-      RegisterCommand(new HelpCommand(commands));
-      RegisterCommand(new ClearCommand());
-      RegisterCommand(new AliasCommand(aliases));
-      RegisterCommand(new OwnedCommand(progressManager, network));
-
-      RegisterCommand(new QuitCommand(progressManager));
     }
 
     public void ProcessCommand(string input, ITerminalOutput output)

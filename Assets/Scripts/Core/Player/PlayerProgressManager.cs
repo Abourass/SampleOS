@@ -115,18 +115,42 @@ public class PlayerProgressManager
   {
     if (PlayerPrefs.HasKey("HackingProgress"))
     {
-      string json = PlayerPrefs.GetString("HackingProgress");
-      var saveData = JsonUtility.FromJson<SaveData>(json);
-
-      compromisedSystems = new HashSet<string>(saveData.CompromisedSystems);
-      discoveredVulnerabilities = new Dictionary<string, HashSet<string>>();
-
-      foreach (var entry in saveData.DiscoveredVulnerabilities)
+      try
       {
-        discoveredVulnerabilities[entry.Key] = new HashSet<string>(entry.Value);
-      }
+        string json = PlayerPrefs.GetString("HackingProgress");
+        var saveData = JsonUtility.FromJson<SaveData>(json);
 
-      networkAccessLevels = new Dictionary<string, int>(saveData.NetworkAccessLevels);
+        if (saveData != null)
+        {
+          compromisedSystems = saveData.CompromisedSystems != null 
+            ? new HashSet<string>(saveData.CompromisedSystems) 
+            : new HashSet<string>();
+          
+          discoveredVulnerabilities = new Dictionary<string, HashSet<string>>();
+          if (saveData.DiscoveredVulnerabilities != null)
+          {
+            foreach (var entry in saveData.DiscoveredVulnerabilities)
+            {
+              if (entry.Value != null)
+              {
+                discoveredVulnerabilities[entry.Key] = new HashSet<string>(entry.Value);
+              }
+            }
+          }
+
+          networkAccessLevels = saveData.NetworkAccessLevels != null
+            ? new Dictionary<string, int>(saveData.NetworkAccessLevels)
+            : new Dictionary<string, int>();
+        }
+      }
+      catch (System.Exception ex)
+      {
+        Debug.LogWarning($"Failed to load progress: {ex.Message}. Starting fresh.");
+        // Reset to defaults if load fails
+        compromisedSystems = new HashSet<string>();
+        discoveredVulnerabilities = new Dictionary<string, HashSet<string>>();
+        networkAccessLevels = new Dictionary<string, int>();
+      }
     }
   }
 

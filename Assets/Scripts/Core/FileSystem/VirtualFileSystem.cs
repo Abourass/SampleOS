@@ -110,10 +110,7 @@ public class VirtualFileSystem
 
     BuildPathRecursive(node.Parent, path);
 
-    // Don't add a slash for the root directory's name
-    if (node.Parent.Parent != null || path.Length > 0)
-      path.Append("/");
-
+    path.Append("/");
     path.Append(node.Name);
   }
 

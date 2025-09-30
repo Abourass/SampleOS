@@ -2,22 +2,24 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SoftwareDatabase
+namespace SampleOS.Core.SoftwarePackages
 {
-  private Dictionary<string, List<SoftwareTemplate>> softwareByCategory = new Dictionary<string, List<SoftwareTemplate>>();
+    public class SoftwareDatabase
+    {
+        private Dictionary<string, List<SoftwareTemplate>> softwareByCategory = new Dictionary<string, List<SoftwareTemplate>>();
 
-  private class SoftwareTemplate
-  {
-    public string Name { get; set; }
-    public string OldVersion { get; set; }
-    public string NewVersion { get; set; }
-    public int[] DefaultPorts { get; set; }
-  }
+        private class SoftwareTemplate
+        {
+            public string Name { get; set; }
+            public string OldVersion { get; set; }
+            public string NewVersion { get; set; }
+            public int[] DefaultPorts { get; set; }
+        }
 
-  public SoftwareDatabase()
-  {
-    // Web servers
-    softwareByCategory["webserver"] = new List<SoftwareTemplate>
+        public SoftwareDatabase()
+        {
+            // Web servers
+            softwareByCategory["webserver"] = new List<SoftwareTemplate>
         {
             new SoftwareTemplate {
                 Name = "Apache",
@@ -39,8 +41,8 @@ public class SoftwareDatabase
             }
         };
 
-    // Databases
-    softwareByCategory["database"] = new List<SoftwareTemplate>
+            // Databases
+            softwareByCategory["database"] = new List<SoftwareTemplate>
         {
             new SoftwareTemplate {
                 Name = "MySQL",
@@ -62,8 +64,8 @@ public class SoftwareDatabase
             }
         };
 
-    // Add more categories as needed: CMS, Firewalls, File servers, etc.
-    softwareByCategory["cms"] = new List<SoftwareTemplate>
+            // Add more categories as needed: CMS, Firewalls, File servers, etc.
+            softwareByCategory["cms"] = new List<SoftwareTemplate>
         {
             new SoftwareTemplate {
                 Name = "WordPress",
@@ -79,7 +81,7 @@ public class SoftwareDatabase
             }
         };
 
-    softwareByCategory["firewall"] = new List<SoftwareTemplate>
+            softwareByCategory["firewall"] = new List<SoftwareTemplate>
         {
             new SoftwareTemplate {
                 Name = "IPTables",
@@ -95,7 +97,7 @@ public class SoftwareDatabase
             }
         };
 
-    softwareByCategory["fileserver"] = new List<SoftwareTemplate>
+            softwareByCategory["fileserver"] = new List<SoftwareTemplate>
         {
             new SoftwareTemplate {
                 Name = "Samba",
@@ -110,44 +112,45 @@ public class SoftwareDatabase
                 DefaultPorts = new[] { 2049 }
             }
         };
-  }
+        }
 
-  public Software GenerateRandomSoftware(string category, DateTime systemCreationDate)
-  {
-    if (!softwareByCategory.TryGetValue(category, out List<SoftwareTemplate> templates))
-      return null;
+        public Software GenerateRandomSoftware(string category, DateTime systemCreationDate)
+        {
+            if (!softwareByCategory.TryGetValue(category, out List<SoftwareTemplate> templates))
+                return null;
 
-    // Pick a random software from this category
-    int index = UnityEngine.Random.Range(0, templates.Count);
-    SoftwareTemplate template = templates[index];
+            // Pick a random software from this category
+            int index = UnityEngine.Random.Range(0, templates.Count);
+            SoftwareTemplate template = templates[index];
 
-    // Calculate a version based on the system's age
-    Version oldVer = new Version(template.OldVersion);
-    Version newVer = new Version(template.NewVersion);
+            // Calculate a version based on the system's age
+            Version oldVer = new Version(template.OldVersion);
+            Version newVer = new Version(template.NewVersion);
 
-    // Software should be newer than the system but not too new
-    DateTime releaseDate = systemCreationDate.AddDays(UnityEngine.Random.Range(30, 365));
+            // Software should be newer than the system but not too new
+            DateTime releaseDate = systemCreationDate.AddDays(UnityEngine.Random.Range(30, 365));
 
-    // Determine how "recent" this software would be
-    float ageRatio = (float)((DateTime.Now - releaseDate).TotalDays / 1500);
-    ageRatio = Mathf.Clamp01(ageRatio);
+            // Determine how "recent" this software would be
+            float ageRatio = (float)((DateTime.Now - releaseDate).TotalDays / 1500);
+            ageRatio = Mathf.Clamp01(ageRatio);
 
-    // Interpolate between old and new versions
-    int major = oldVer.Major + (int)((newVer.Major - oldVer.Major) * (1 - ageRatio));
-    int minor = oldVer.Minor + (int)((newVer.Minor - oldVer.Minor) * (1 - ageRatio));
-    int build = UnityEngine.Random.Range(0, 100);
+            // Interpolate between old and new versions
+            int major = oldVer.Major + (int)((newVer.Major - oldVer.Major) * (1 - ageRatio));
+            int minor = oldVer.Minor + (int)((newVer.Minor - oldVer.Minor) * (1 - ageRatio));
+            int build = UnityEngine.Random.Range(0, 100);
 
-    string version = $"{major}.{minor}.{build}";
+            string version = $"{major}.{minor}.{build}";
 
-    // Create the software
-    Software software = new Software(template.Name, version, category, releaseDate);
+            // Create the software
+            Software software = new Software(template.Name, version, category, releaseDate);
 
-    // Add the default ports
-    foreach (int port in template.DefaultPorts)
-    {
-      software.AddPort(port);
+            // Add the default ports
+            foreach (int port in template.DefaultPorts)
+            {
+                software.AddPort(port);
+            }
+
+            return software;
+        }
     }
-
-    return software;
-  }
 }

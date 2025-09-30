@@ -70,8 +70,8 @@ namespace SampleOS.Core.FileSystem
       Name = name;
       IsDirectory = isDirectory;
       Content = isDirectory ? null : content;
-      CreationTime = DateTime.Now;
-      ModificationTime = DateTime.Now;
+      CreationTime = DateTime.UtcNow;
+      ModificationTime = DateTime.UtcNow;
 
       if (isDirectory)
       {
@@ -188,7 +188,7 @@ namespace SampleOS.Core.FileSystem
     /// </summary>
     public void UpdateModificationTime()
     {
-      ModificationTime = DateTime.Now;
+      ModificationTime = DateTime.UtcNow;
     }
   }
 }

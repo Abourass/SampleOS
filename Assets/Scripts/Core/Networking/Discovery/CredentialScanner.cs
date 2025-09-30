@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
+using SampleOS.Core.SoftwarePackages;
 
 namespace Core.Networking.Discovery
 {

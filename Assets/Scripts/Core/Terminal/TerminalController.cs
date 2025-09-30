@@ -69,13 +69,17 @@ namespace SampleOS.Core.Terminal
 
         private void ProcessCommand(string input)
         {
+            // Check if we're in interactive mode
+            bool isInteractiveMode = commandProcessor.IsWaitingForInput;
+
             // Don't echo navigation commands from interactive mode
-            if (!commandProcessor.IsWaitingForCommandInput ||
+            if (!isInteractiveMode ||
                 (input != "up" && input != "down" && input != "enter" && input != "escape"))
             {
                 outputHandler.AppendText(input + "\n");
             }
 
+            // Process the command
             commandProcessor.ProcessCommand(input, outputHandler);
 
             // Update file system reference in input handler if it changed (e.g., SSH)
@@ -86,8 +90,8 @@ namespace SampleOS.Core.Terminal
                 inputHandler.UpdateFileSystem(fileSystem);
             }
 
-            // Only display the standard prompt if we're not waiting for command input
-            if (!commandProcessor.IsWaitingForCommandInput)
+            // Only display the standard prompt if we're not waiting for input
+            if (!commandProcessor.IsWaitingForInput)
             {
                 outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
             }

@@ -114,16 +114,16 @@ public class TerminalInputHandler : MonoBehaviour
 
     // Reset history index when starting new input
     currentHistoryIndex = -1;
-    
+
     // Check if we've just entered interactive mode
-    if (commandProcessor != null && commandProcessor.IsWaitingForCommandInput && !hasEnteredInteractiveMode)
+    if (commandProcessor != null && commandProcessor.IsWaitingForInput && !hasEnteredInteractiveMode)
     {
       hasEnteredInteractiveMode = true;
       interactiveModeStartTime = Time.time;
     }
-    
+
     // If we're no longer in interactive mode, reset the flag
-    if (commandProcessor != null && !commandProcessor.IsWaitingForCommandInput)
+    if (commandProcessor != null && !commandProcessor.IsWaitingForInput)
     {
       hasEnteredInteractiveMode = false;
     }
@@ -135,7 +135,7 @@ public class TerminalInputHandler : MonoBehaviour
   private void OnTextChanged(string newText)
   {
     // Don't show completions during interactive command mode
-    if (commandProcessor != null && commandProcessor.IsWaitingForCommandInput)
+    if (commandProcessor != null && commandProcessor.IsWaitingForInput)
     {
       ClearCompletion();
       return;
@@ -265,7 +265,7 @@ public class TerminalInputHandler : MonoBehaviour
     }
 
     // Only handle special keys when an interactive command is active
-    if (commandProcessor != null && commandProcessor.IsWaitingForCommandInput)
+    if (commandProcessor != null && commandProcessor.IsWaitingForInput)
     {
       // If we just entered interactive mode, add a delay before accepting input
       if (hasEnteredInteractiveMode && (Time.time - interactiveModeStartTime < INPUT_DELAY))
@@ -333,8 +333,8 @@ public class TerminalInputHandler : MonoBehaviour
 
   private void AcceptCompletion()
   {
-    if (!string.IsNullOrEmpty(currentCompletion) && 
-        !commandProcessor.IsWaitingForCommandInput &&
+    if (!string.IsNullOrEmpty(currentCompletion) &&
+        !commandProcessor.IsWaitingForInput &&
         inputField.isFocused)
     {
       inputField.text = currentCompletion;
@@ -372,7 +372,7 @@ public class TerminalInputHandler : MonoBehaviour
   private char HandleKeyInput(string text, int charIndex, char addedChar)
   {
     // Normal command history navigation
-    if (!commandProcessor.IsWaitingForCommandInput)
+    if (!commandProcessor.IsWaitingForInput)
     {
       var keyboard = Keyboard.current;
       if (keyboard != null)

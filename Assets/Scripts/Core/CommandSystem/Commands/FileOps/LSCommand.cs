@@ -1,53 +1,97 @@
-using SampleOS.Core.CommandSystem;
+using System.Linq;
+using UnityEngine;
 
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-
-  /// <summary>
-  /// Command to list files and directories in the current or specified directory.
-  /// Usage: ls [directory]
-  /// </summary>
-  public class LsCommand : ICommand, IFileSystemCommand
+  public class LsCommand : CommandBase
   {
-    private VirtualFileSystem fileSystem;
+    public override string Name => "ls";
+    public override string Description => "List directory contents";
+    public override string Usage => "ls [-l] [-a] [path]";
 
-    public string Name => "ls";
-    public string Description => "List directory contents";
-    public string Usage => "ls [directory]";
-
-    public LsCommand(VirtualFileSystem fs)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-      fileSystem = fs;
-    }
+      bool longFormat = false;
+      bool showHidden = false;
+      string path = null;
 
-    public void Execute(string[] args, ITerminalOutput output)
-    {
-      string path = args.Length > 0 ? args[0] : ".";
-      var result = fileSystem.ListDirectory(path);
-
-      if (result.IsSuccess)
+      // Parse arguments
+      foreach (var arg in args)
       {
-        foreach (var entry in result.Data)
-        {
-          if (entry.IsDirectory)
-          {
-            output.AppendText($"<color=#4E97D8>[DIR] {entry.Name}</color>\n");
-          }
-          else
-          {
-            output.AppendText($"<color=#A9B7C6>{entry.Name}</color>\n");
-          }
-        }
+        if (arg == "-l")
+          longFormat = true;
+        else if (arg == "-a")
+          showHidden = true;
+        else if (!arg.StartsWith("-"))
+          path = arg;
+      }
+
+      path = path ?? context.FileSystem.CurrentPath;
+
+      var result = context.FileSystem.ListDirectory(path);
+      if (!result.IsSuccess)
+      {
+        WriteError(context, result.ErrorMessage);
+        return CommandResult.Error(result.ErrorMessage);
+      }
+
+      var items = result.Data
+          .Where(node => showHidden || !node.Name.StartsWith("."))
+          .OrderBy(node => node.Name)
+          .ToList();
+
+      if (items.Count == 0)
+      {
+        return CommandResult.Ok();
+      }
+
+      if (longFormat)
+      {
+        DisplayLongFormat(items, context);
       }
       else
       {
-        output.AppendText($"Error: {result.ErrorMessage}\n");
+        DisplayShortFormat(items, context);
+      }
+
+      return CommandResult.Ok();
+    }
+
+    private void DisplayShortFormat(System.Collections.Generic.List<VirtualNode> items, CommandContext context)
+    {
+      foreach (var item in items)
+      {
+        if (item.IsDirectory)
+        {
+          context.Stdout.SetColor(new Color(0.3f, 0.6f, 1f)); // Blue
+          WriteOutput(context, item.Name + "/");
+          context.Stdout.SetColor(Color.white);
+        }
+        else
+        {
+          WriteOutput(context, item.Name);
+        }
       }
     }
 
-    public void SetFileSystem(VirtualFileSystem fs)
+    private void DisplayLongFormat(System.Collections.Generic.List<VirtualNode> items, CommandContext context)
     {
-      fileSystem = fs;
+      foreach (var item in items)
+      {
+        string permissions = item.Permissions;
+        string owner = item.Owner;
+        string size = item.Size.ToString().PadLeft(8);
+        string date = item.ModificationTime.ToString("MMM dd HH:mm");
+        string name = item.IsDirectory ? item.Name + "/" : item.Name;
+
+        if (item.IsDirectory)
+          context.Stdout.SetColor(new Color(0.3f, 0.6f, 1f));
+
+        WriteOutput(context, $"{permissions} {owner} {size} {date} {name}");
+
+        if (item.IsDirectory)
+          context.Stdout.SetColor(Color.white);
+      }
     }
   }
 }

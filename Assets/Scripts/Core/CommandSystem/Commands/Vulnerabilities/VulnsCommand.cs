@@ -1,24 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-using SampleOS.Core.CommandSystem;
 
 namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
 {
-  public class VulnsCommand : ICommand
+  public class VulnsCommand : CommandBase
   {
     private PlayerVulnerabilityInventory vulnerabilityInventory;
 
-    public string Name => "vulns";
-    public string Description => "Display your vulnerability database";
-    public string Usage => "vulns [--sort=severity|date|cve]";
+    public override string Name => "vulns";
+    public override string Description => "Display your vulnerability database";
+    public override string Usage => "vulns [--sort=severity|date|cve]";
 
     public VulnsCommand(PlayerVulnerabilityInventory inventory)
     {
       this.vulnerabilityInventory = inventory;
     }
 
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
       // Parse sort option
       string sortBy = "date"; // default
@@ -37,8 +37,8 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
 
       if (vulnerabilities.Count == 0)
       {
-        output.AppendText("No vulnerabilities in database. Use 'vuln-scan' to find vulnerabilities.\n");
-        return;
+        WriteOutput(context, "No vulnerabilities in database. Use 'vuln-scan' to find vulnerabilities.");
+        return CommandResult.Ok();
       }
 
       // Sort based on option
@@ -57,19 +57,51 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
       }
 
       // Display header
-      output.AppendText("VULNERABILITY DATABASE\n");
-      output.AppendText("=====================\n\n");
-      output.AppendText("CVE             | SEVERITY | TARGET           | SOFTWARE        | NAME\n");
-      output.AppendText("----------------+---------+-----------------+----------------+---------------------------\n");
+      context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
+      WriteOutput(context, "VULNERABILITY DATABASE");
+      WriteOutput(context, "=====================");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, "");
+      WriteOutput(context, "CVE             | SEVERITY | TARGET           | SOFTWARE        | NAME");
+      WriteOutput(context, "----------------+----------+------------------+-----------------+---------------------------");
 
       // Display vulnerabilities with clear column separators
       foreach (var vuln in vulnerabilities)
       {
         string target = $"{vuln.HostIP}:{vuln.Port}";
-        output.AppendText(
-            $"{vuln.Vulnerability.CVE,-15} | {vuln.Vulnerability.Severity,-8} | {target,-15} | {vuln.SoftwareName,-14} | {vuln.Vulnerability.Name}\n"
-        );
+
+        // Color code by severity
+        Color severityColor = GetSeverityColor(vuln.Vulnerability.Severity);
+        context.Stdout.SetColor(severityColor);
+
+        string line = string.Format("{0,-15} | {1,-8} | {2,-16} | {3,-15} | {4}",
+            vuln.Vulnerability.CVE,
+            vuln.Vulnerability.Severity,
+            target,
+            vuln.SoftwareName,
+            vuln.Vulnerability.Name);
+
+        WriteOutput(context, line);
+        context.Stdout.SetColor(Color.white);
       }
+
+      WriteOutput(context, "");
+      WriteOutput(context, $"Total vulnerabilities: {vulnerabilities.Count}");
+      WriteOutput(context, $"Sorted by: {sortBy}");
+
+      return CommandResult.Ok();
+    }
+
+    private Color GetSeverityColor(int severity)
+    {
+      if (severity >= 9)
+        return new Color(1f, 0.2f, 0.2f); // Critical - Bright red
+      else if (severity >= 7)
+        return new Color(1f, 0.5f, 0.2f); // High - Orange
+      else if (severity >= 5)
+        return new Color(1f, 0.9f, 0.3f); // Medium - Yellow
+      else
+        return new Color(0.7f, 0.7f, 0.7f); // Low - Gray
     }
   }
 }

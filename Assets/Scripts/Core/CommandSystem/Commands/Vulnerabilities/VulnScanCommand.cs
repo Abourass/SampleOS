@@ -1,32 +1,38 @@
 using System;
+using System.Threading.Tasks;
 using UnityEngine;
-using SampleOS.Core.CommandSystem;
 
 namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
 {
-  public class VulnScanCommand : ICommand
+  public class VulnScanCommand : CommandBase, IAsyncCommand
   {
-    private VirtualNetwork network;
     private PlayerVulnerabilityInventory vulnerabilityInventory;
 
-    public string Name => "vuln-scan";
-    public string Description => "Scan for vulnerabilities in network services";
-    public string Usage => "vuln-scan <host> [port]";
+    public override string Name => "vuln-scan";
+    public override string Description => "Scan for vulnerabilities in network services";
+    public override string Usage => "vuln-scan <host> [port]";
 
-    public VulnScanCommand(VirtualNetwork network, PlayerVulnerabilityInventory inventory)
+    public bool SupportsCancellation => true;
+
+    public VulnScanCommand(PlayerVulnerabilityInventory inventory)
     {
-      this.network = network;
       this.vulnerabilityInventory = inventory;
     }
 
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
+    {
+      // Synchronous fallback
+      return ExecuteAsync(args, context).GetAwaiter().GetResult();
+    }
+
+    public async Task<CommandResult> ExecuteAsync(string[] args, CommandContext context)
     {
       try
       {
         if (args.Length < 1)
         {
-          output.AppendText($"Usage: {Usage}\n");
-          return;
+          WriteError(context, $"Usage: {Usage}");
+          return CommandResult.Error("Missing hostname");
         }
 
         string target = args[0];
@@ -37,21 +43,50 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
           specificPort = parsedPort;
         }
 
-        output.AppendText($"Scanning {target} for vulnerabilities...\n\n");
+        WriteOutput(context, $"Scanning {target} for vulnerabilities...");
+        WriteOutput(context, "");
 
-        RemoteSystem system = network.GetSystemByHostname(target);
-        if (system == null)
+        // Check network availability
+        if (context.Network == null)
         {
-          output.AppendText($"Host {target} not found.\n");
-          return;
+          WriteError(context, "Network not available");
+          return CommandResult.Error("Network not available");
         }
 
+        RemoteSystem system = context.Network.GetSystemByHostname(target);
+        if (system == null)
+        {
+          WriteError(context, $"Host {target} not found.");
+          return CommandResult.Error("Host not found");
+        }
+
+        // Start scan with progress
+        ReportProgress(context, 0f, "Initializing scan");
+        await Task.Delay(300, context.CancellationToken);
+
+        if (context.CancellationToken.IsCancellationRequested)
+          return CommandResult.Error("Scan cancelled");
+
         // Generate vulnerabilities if not already done
+        WriteOutput(context, "Analyzing system configuration...");
+        ReportProgress(context, 0.2f, "Analyzing system");
         system.GenerateVulnerabilities();
+        await Task.Delay(500, context.CancellationToken);
+
+        if (context.CancellationToken.IsCancellationRequested)
+          return CommandResult.Error("Scan cancelled");
 
         // Get open ports
+        WriteOutput(context, "Enumerating services...");
+        ReportProgress(context, 0.4f, "Enumerating services");
         var ports = system.GetOpenPorts();
+        await Task.Delay(400, context.CancellationToken);
+
+        if (context.CancellationToken.IsCancellationRequested)
+          return CommandResult.Error("Scan cancelled");
+
         bool vulnerabilitiesFound = false;
+        int portsScanned = 0;
 
         foreach (int portNumber in ports)
         {
@@ -61,21 +96,30 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
           Software software = system.GetSoftwareOnPort(portNumber);
           if (software == null) continue;
 
-          output.AppendText($"Checking {software.Name} v{software.Version} on port {portNumber}...\n");
+          portsScanned++;
+          float progress = 0.4f + (0.5f * portsScanned / ports.Count);
+          ReportProgress(context, progress, $"Checking port {portNumber}");
+
+          WriteOutput(context, $"Checking {software.Name} v{software.Version} on port {portNumber}...");
+
+          // Simulate scan time
+          await Task.Delay(300, context.CancellationToken);
+
+          if (context.CancellationToken.IsCancellationRequested)
+            return CommandResult.Error("Scan cancelled");
 
           if (software.HasVulnerability())
           {
             // Found at least one vulnerability!
             vulnerabilitiesFound = true;
-            Color defaultColor = new Color(1f, 1f, 1f);
             Color vulnColor = new Color(1f, 0.5f, 0.5f); // Red
 
             foreach (var vuln in software.Vulnerabilities)
             {
-              output.SetColor(vulnColor);
-              output.AppendText($"[VULNERABLE] {vuln.CVE}: {vuln.Name} (Severity: {vuln.Severity}/10)\n");
-              output.SetColor(defaultColor);
-              output.AppendText($"  {vuln.Description}\n");
+              context.Stdout.SetColor(vulnColor);
+              WriteOutput(context, $"[VULNERABLE] {vuln.CVE}: {vuln.Name} (Severity: {vuln.Severity}/10)");
+              context.Stdout.SetColor(Color.white);
+              WriteOutput(context, $"  {vuln.Description}");
 
               // Add to player's inventory
               vulnerabilityInventory.AddVulnerability(vuln, target, portNumber, software.Name);
@@ -83,29 +127,38 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
           }
           else
           {
-            output.AppendText("No vulnerabilities found.\n");
+            WriteOutput(context, "No vulnerabilities found.");
           }
 
-          output.AppendText("\n");
+          WriteOutput(context, "");
         }
+
+        ReportProgress(context, 0.9f, "Finalizing scan");
+        await Task.Delay(200, context.CancellationToken);
 
         if (!vulnerabilitiesFound)
         {
-          output.AppendText("No vulnerabilities were found on this system.\n");
+          WriteOutput(context, "No vulnerabilities were found on this system.");
         }
         else
         {
-          output.AppendText("Vulnerabilities added to your database.\n");
-          output.AppendText("Use 'vulns' command to view your vulnerability inventory.\n");
+          context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
+          WriteOutput(context, "Vulnerabilities added to your database.");
+          context.Stdout.SetColor(Color.white);
+          WriteOutput(context, "Use 'vulns' command to view your vulnerability inventory.");
 
           // Save vulnerabilities to a file in the user's home directory
-          vulnerabilityInventory.SaveToLocalFile(network.GetLocalSystem().FileSystem);
+          vulnerabilityInventory.SaveToLocalFile(context.Network.GetLocalSystem().FileSystem);
         }
+
+        ReportProgress(context, 1.0f, "Scan complete");
+        return CommandResult.Ok();
       }
       catch (Exception ex)
       {
-        output.AppendText($"Error during scan: {ex.Message}\n");
+        WriteError(context, $"Error during scan: {ex.Message}");
         Debug.LogError($"VulnScanCommand error: {ex}");
+        return CommandResult.FromException(ex);
       }
     }
   }

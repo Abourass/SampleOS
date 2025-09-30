@@ -1,349 +1,235 @@
-using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 using UnityEngine;
-using SampleOS.Core.CommandSystem;
 
 namespace SampleOS.Core.CommandSystem.Commands.CLI
 {
-
-    /// <summary>
-    /// Implements a simplified version of the Gum CLI tool for creating interactive TUI elements
-    /// </summary>
-    public class GumCommand : ICommand, IInteractiveCommand, IFileSystemCommand
+    public class GumCommand : CommandBase, IInteractiveCommand
     {
-        private VirtualFileSystem fileSystem;
-        private bool isWaitingForInput;
         private GumMode currentMode;
-        private string[] currentOptions;
-        private string currentPrompt;
-        private string currentTitle;
-        private ITerminalOutput currentOutput;
-        private int selectedIndex;
-        private List<VirtualNode> fileList;
+        private List<string> options = new List<string>();
+        private int selectedIndex = 0;
+        private string prompt = "";
+        private bool waitingForInput = false;
+        private string selectedValue = null;
 
-        public string Name => "gum";
-        public string Description => "A tool for glamorous shell scripts with TUI components";
-        public string Usage => "gum <style> [options]\n" +
-                              "  Styles:\n" +
-                              "    choose    - Choose an option from a list\n" +
-                              "    confirm   - Ask for confirmation (y/n)\n" +
-                              "    file      - Select a file from the filesystem\n" +
-                              "  Common Options:\n" +
-                              "    --title    - Set the title for the prompt\n" +
-                              "    --prompt   - Set the prompt text";
+        public override string Name => "gum";
+        public override string Description => "Interactive CLI prompts (choose, input, confirm)";
+        public override string Usage => "gum choose <option1> <option2> ... | gum input --placeholder \"text\" | gum confirm \"question\"";
 
-        public bool IsWaitingForInput => isWaitingForInput;
+        public bool IsWaitingForInput => waitingForInput;
 
         private enum GumMode
         {
+            None,
             Choose,
-            Confirm,
-            File
+            Input,
+            Confirm
         }
 
-        public GumCommand(VirtualFileSystem fs)
-        {
-            fileSystem = fs;
-        }
-
-        public void SetFileSystem(VirtualFileSystem fs)
-        {
-            fileSystem = fs;
-        }
-
-        public void Execute(string[] args, ITerminalOutput output)
+        public override CommandResult Execute(string[] args, CommandContext context)
         {
             if (args.Length == 0)
             {
-                output.AppendText($"Error: Style required\n{Usage}\n");
-                return;
+                WriteError(context, Usage);
+                return CommandResult.Error("No mode specified");
             }
 
-            string style = args[0].ToLower();
+            string mode = args[0].ToLower();
 
-            // Parse common options
-            currentTitle = ExtractOption(args, "--title");
-            currentPrompt = ExtractOption(args, "--prompt");
-            currentOutput = output;
-
-            switch (style)
+            switch (mode)
             {
                 case "choose":
-                    ExecuteChoose(args, output);
-                    break;
+                    return ExecuteChoose(args.Skip(1).ToArray(), context);
+
+                case "input":
+                    return ExecuteInput(args.Skip(1).ToArray(), context);
+
                 case "confirm":
-                    ExecuteConfirm(args, output);
-                    break;
-                case "file":
-                    ExecuteFile(args, output);
-                    break;
+                    return ExecuteConfirm(args.Skip(1).ToArray(), context);
+
                 default:
-                    output.AppendText($"Error: Unknown style '{style}'\n{Usage}\n");
-                    break;
+                    WriteError(context, $"Unknown gum mode: {mode}");
+                    WriteError(context, "Available modes: choose, input, confirm");
+                    return CommandResult.Error($"Unknown mode: {mode}");
             }
         }
 
-        private void ExecuteChoose(string[] args, ITerminalOutput output)
+        private CommandResult ExecuteChoose(string[] args, CommandContext context)
         {
-            // Extract options after the "choose" command
-            List<string> options = new List<string>();
-            for (int i = 1; i < args.Length; i++)
+            if (args.Length == 0)
             {
-                if (!args[i].StartsWith("--"))
-                {
-                    options.Add(args[i]);
-                }
-                else
-                {
-                    // Skip option and its value
-                    i++;
-                }
-            }
-
-            if (options.Count == 0)
-            {
-                output.AppendText("Error: No options provided for choose\n");
-                return;
+                WriteError(context, "Usage: gum choose <option1> <option2> ...");
+                return CommandResult.Error("No options provided");
             }
 
             currentMode = GumMode.Choose;
-            currentOptions = options.ToArray();
+            options = new List<string>(args);
             selectedIndex = 0;
+            waitingForInput = true;
 
-            DisplayChooseOptions(output);
+            DisplayChooseOptions(context);
+            return CommandResult.Ok();
         }
 
-        private void ExecuteConfirm(string[] args, ITerminalOutput output)
+        private CommandResult ExecuteInput(string[] args, CommandContext context)
         {
+            currentMode = GumMode.Input;
+            prompt = "Input: ";
+
+            // Parse placeholder
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--placeholder" && i + 1 < args.Length)
+                {
+                    prompt = args[i + 1];
+                }
+            }
+
+            waitingForInput = true;
+            context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f));
+            WriteOutput(context, prompt);
+            context.Stdout.SetColor(Color.white);
+
+            return CommandResult.Ok();
+        }
+
+        private CommandResult ExecuteConfirm(string[] args, CommandContext context)
+        {
+            if (args.Length == 0)
+            {
+                WriteError(context, "Usage: gum confirm \"question\"");
+                return CommandResult.Error("No question provided");
+            }
+
             currentMode = GumMode.Confirm;
+            prompt = string.Join(" ", args);
+            options = new List<string> { "Yes", "No" };
+            selectedIndex = 1; // Default to "No"
+            waitingForInput = true;
 
-            string prompt = currentPrompt ?? "Confirm?";
-            string displayTitle = currentTitle != null ? $"{currentTitle}\n" : "";
+            WriteOutput(context, prompt);
+            DisplayChooseOptions(context);
 
-            output.AppendText($"{displayTitle}{prompt} (y/n): ");
-            isWaitingForInput = true;
+            return CommandResult.Ok();
         }
 
-        private void ExecuteFile(string[] args, ITerminalOutput output)
+        public void ProcessInput(string input, CommandContext context)
         {
-            string path = ".";
+            if (!waitingForInput)
+                return;
 
-            // Check for path argument
-            for (int i = 1; i < args.Length; i++)
+            switch (currentMode)
             {
-                if (!args[i].StartsWith("--") && args[i - 1] != "--title" && args[i - 1] != "--prompt")
-                {
-                    path = args[i];
+                case GumMode.Choose:
+                case GumMode.Confirm:
+                    ProcessChooseInput(input, context);
                     break;
-                }
-            }
 
-            var result = fileSystem.ListDirectory(path);
-            if (!result.IsSuccess)
-            {
-                output.AppendText($"Error: {result.ErrorMessage}\n");
-                return;
-            }
-
-            fileList = result.Data;
-
-            // Filter out only regular files if needed
-            // fileList = fileList.Where(f => !f.IsDirectory).ToList();
-
-            if (fileList.Count == 0)
-            {
-                output.AppendText("No files found in the directory\n");
-                return;
-            }
-
-            currentMode = GumMode.File;
-            selectedIndex = 0;
-
-            DisplayFileList(output);
-        }
-
-        private void DisplayChooseOptions(ITerminalOutput output)
-        {
-            output.Clear();
-
-            if (currentTitle != null)
-            {
-                output.AppendText($"{currentTitle}\n");
-            }
-
-            if (currentPrompt != null)
-            {
-                output.AppendText($"{currentPrompt}\n");
-            }
-
-            for (int i = 0; i < currentOptions.Length; i++)
-            {
-                if (i == selectedIndex)
-                {
-                    output.SetColor(Color.cyan);
-                    output.AppendText($"▶ {currentOptions[i]}\n");
-                    output.SetColor(Color.white);
-                }
-                else
-                {
-                    output.AppendText($"  {currentOptions[i]}\n");
-                }
-            }
-
-            output.AppendText("\nUse arrow keys ↑/↓ to navigate, Enter to select, Esc to cancel\n");
-            isWaitingForInput = true;
-        }
-
-        private void DisplayFileList(ITerminalOutput output)
-        {
-            output.Clear();
-
-            if (currentTitle != null)
-            {
-                output.AppendText($"{currentTitle}\n");
-            }
-
-            string prompt = currentPrompt ?? "Select a file:";
-            output.AppendText($"{prompt}\n\n");
-
-            for (int i = 0; i < fileList.Count; i++)
-            {
-                string prefix = fileList[i].IsDirectory ? "📁 " : "📄 ";
-
-                if (i == selectedIndex)
-                {
-                    output.SetColor(Color.cyan);
-                    output.AppendText($"▶ {prefix}{fileList[i].Name}\n");
-                    output.SetColor(Color.white);
-                }
-                else
-                {
-                    output.AppendText($"  {prefix}{fileList[i].Name}\n");
-                }
-            }
-
-            output.AppendText("\nUse arrow keys ↑/↓ to navigate, Enter to select, Esc to cancel\n");
-            isWaitingForInput = true;
-        }
-
-        public void RequestInput(string prompt, ITerminalOutput output)
-        {
-            output.AppendText(prompt);
-            isWaitingForInput = true;
-        }
-
-        public void ProcessInput(string input, ITerminalOutput output)
-        {
-            // Debug output to troubleshoot input issues
-            // output.AppendText($"Debug - Received input: '{input}'\n");
-
-            if (currentMode == GumMode.Confirm)
-            {
-                ProcessConfirmInput(input, output);
-            }
-            else if (input == "up" || input == "down" || input == "enter" || input == "escape")
-            {
-                // Handle navigation commands
-                ProcessNavigationInput(input, output);
-            }
-            else
-            {
-                // For regular text input in other modes
-                if (input.ToLower() == "escape")
-                {
-                    isWaitingForInput = false;
-                    output.Clear();
-                    output.AppendText("Cancelled\n");
-                    return;
-                }
-
-                // Interpret y/n in confirm mode regardless of case
-                if (currentMode == GumMode.Confirm)
-                {
-                    ProcessConfirmInput(input, output);
-                }
+                case GumMode.Input:
+                    ProcessTextInput(input, context);
+                    break;
             }
         }
 
-        private void ProcessConfirmInput(string input, ITerminalOutput output)
-        {
-            isWaitingForInput = false;
-            string response = input.Trim().ToLower();
-
-            if (response == "y" || response == "yes")
-            {
-                output.AppendText("yes\n");
-            }
-            else
-            {
-                output.AppendText("no\n");
-            }
-        }
-
-        private void ProcessNavigationInput(string input, ITerminalOutput output)
+        private void ProcessChooseInput(string input, CommandContext context)
         {
             switch (input.ToLower())
             {
                 case "up":
-                    selectedIndex = Math.Max(0, selectedIndex - 1);
+                    selectedIndex = (selectedIndex - 1 + options.Count) % options.Count;
+                    DisplayChooseOptions(context);
                     break;
 
                 case "down":
-                    // Use the right collection depending on mode
-                    if (currentMode == GumMode.Choose && currentOptions != null)
-                    {
-                        selectedIndex = Math.Min(currentOptions.Length - 1, selectedIndex + 1);
-                    }
-                    else if (currentMode == GumMode.File && fileList != null)
-                    {
-                        selectedIndex = Math.Min(fileList.Count - 1, selectedIndex + 1);
-                    }
+                    selectedIndex = (selectedIndex + 1) % options.Count;
+                    DisplayChooseOptions(context);
                     break;
 
                 case "enter":
-                    isWaitingForInput = false;
+                    selectedValue = options[selectedIndex];
+                    WriteOutput(context, "");
 
-                    if (currentMode == GumMode.Choose && currentOptions != null && currentOptions.Length > 0)
+                    if (currentMode == GumMode.Confirm)
                     {
-                        output.Clear();
-                        output.AppendText($"{currentOptions[selectedIndex]}\n");
+                        bool confirmed = selectedValue == "Yes";
+                        context.Stdout.SetColor(confirmed ? new Color(0.3f, 1f, 0.3f) : new Color(1f, 0.3f, 0.3f));
+                        WriteOutput(context, $"Selected: {selectedValue}");
+                        context.Stdout.SetColor(Color.white);
+
+                        // Set exit code based on confirmation
+                        context.Environment.Set("GUM_CONFIRM", confirmed ? "1" : "0");
                     }
-                    else if (currentMode == GumMode.File && fileList != null && fileList.Count > 0)
+                    else
                     {
-                        output.Clear();
-                        output.AppendText($"{fileList[selectedIndex].Name}\n");
+                        context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
+                        WriteOutput(context, $"Selected: {selectedValue}");
+                        context.Stdout.SetColor(Color.white);
                     }
-                    return;
+
+                    // Store result in environment
+                    context.Environment.Set("GUM_CHOICE", selectedValue);
+
+                    waitingForInput = false;
+                    currentMode = GumMode.None;
+                    break;
 
                 case "escape":
-                    isWaitingForInput = false;
-                    output.Clear();
-                    output.AppendText("Cancelled\n");
-                    return;
-            }
-
-            // Refresh the display
-            if (currentMode == GumMode.Choose)
-            {
-                DisplayChooseOptions(output);
-            }
-            else if (currentMode == GumMode.File)
-            {
-                DisplayFileList(output);
+                    WriteOutput(context, "");
+                    WriteError(context, "Selection cancelled");
+                    waitingForInput = false;
+                    currentMode = GumMode.None;
+                    break;
             }
         }
 
-        private string ExtractOption(string[] args, string optionName)
+        private void ProcessTextInput(string input, CommandContext context)
         {
-            for (int i = 1; i < args.Length - 1; i++)
+            if (input.ToLower() == "escape")
             {
-                if (args[i] == optionName)
+                WriteError(context, "Input cancelled");
+                waitingForInput = false;
+                currentMode = GumMode.None;
+                return;
+            }
+
+            // Any other input is treated as the text input
+            selectedValue = input;
+            context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
+            WriteOutput(context, $"Input: {selectedValue}");
+            context.Stdout.SetColor(Color.white);
+
+            // Store result in environment
+            context.Environment.Set("GUM_INPUT", selectedValue);
+
+            waitingForInput = false;
+            currentMode = GumMode.None;
+        }
+
+        private void DisplayChooseOptions(CommandContext context)
+        {
+            WriteOutput(context, "");
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (i == selectedIndex)
                 {
-                    return args[i + 1];
+                    context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+                    WriteOutput(context, $"→ {options[i]}");
+                    context.Stdout.SetColor(Color.white);
+                }
+                else
+                {
+                    context.Stdout.SetColor(new Color(0.7f, 0.7f, 0.7f)); // Gray
+                    WriteOutput(context, $"  {options[i]}");
+                    context.Stdout.SetColor(Color.white);
                 }
             }
-            return null;
+
+            WriteOutput(context, "");
+            context.Stdout.SetColor(new Color(0.5f, 0.5f, 0.5f));
+            WriteOutput(context, "(Use arrow keys to navigate, Enter to select, Escape to cancel)");
+            context.Stdout.SetColor(Color.white);
         }
     }
 }

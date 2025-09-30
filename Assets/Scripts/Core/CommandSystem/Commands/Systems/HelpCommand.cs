@@ -1,66 +1,62 @@
 using System.Collections.Generic;
-using System.Text;
-using SampleOS.Core.CommandSystem;
+using System.Linq;
 
 namespace SampleOS.Core.CommandSystem.Commands.Systems
 {
-  /// <summary>
-  /// Command to display help information about available commands.
-  /// Usage: help [command]
-  /// If no command is specified, lists all available commands.
-  /// </summary>
-  public class HelpCommand : ICommand
+  public class HelpCommand : CommandBase
   {
     private Dictionary<string, ICommand> commands;
 
-    public string Name => "help";
-    public string Description => "Display help information about available commands";
-    public string Usage => "help [command]";
+    public override string Name => "help";
+    public override string Description => "Shows available commands";
+    public override string Usage => "help [command]";
 
-    public HelpCommand(Dictionary<string, ICommand> commandDictionary)
+    public HelpCommand(Dictionary<string, ICommand> commands)
     {
-      commands = commandDictionary;
+      this.commands = commands;
     }
 
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-      if (args.Length == 0)
+      if (args.Length > 0)
       {
-        // Display help for all commands
-        output.AppendText("Available commands:\n\n");
-
-        // Get all commands and sort them alphabetically
-        List<ICommand> sortedCommands = new List<ICommand>(commands.Values);
-        sortedCommands.Sort((a, b) => string.Compare(a.Name, b.Name));
-
-        foreach (var cmd in sortedCommands)
-        {
-          output.AppendText($"<color=#4E97D8>{cmd.Name}</color> - {cmd.Description}\n");
-        }
-
-        output.AppendText("\nType 'help <command>' for more information about a specific command.\n");
+        return ShowCommandHelp(args[0], context);
       }
-      else
+
+      return ShowAllCommands(context);
+    }
+
+    private CommandResult ShowAllCommands(CommandContext context)
+    {
+      WriteOutput(context, "Available commands:\n");
+
+      var sortedCommands = commands.Values
+          .OrderBy(cmd => cmd.Name)
+          .ToList();
+
+      int maxNameLength = sortedCommands.Max(cmd => cmd.Name.Length);
+
+      foreach (var cmd in sortedCommands)
       {
-        // Display help for a specific command
-        string commandName = args[0].ToLower();
-
-        if (commands.TryGetValue(commandName, out ICommand command))
-        {
-          StringBuilder helpText = new StringBuilder();
-
-          helpText.AppendLine($"<color=#4E97D8>{command.Name}</color>");
-          helpText.AppendLine($"  {command.Description}");
-          helpText.AppendLine($"  Usage: {command.Usage}");
-
-          output.AppendText(helpText.ToString());
-        }
-        else
-        {
-          output.AppendText($"Unknown command: {commandName}\n");
-          output.AppendText("Type 'help' to see a list of all available commands.\n");
-        }
+        string paddedName = cmd.Name.PadRight(maxNameLength + 2);
+        WriteOutput(context, $"  {paddedName}{cmd.Description}");
       }
+
+      WriteOutput(context, "\nType 'help <command>' for more information on a specific command.");
+      return CommandResult.Ok();
+    }
+
+    private CommandResult ShowCommandHelp(string commandName, CommandContext context)
+    {
+      if (!commands.TryGetValue(commandName.ToLower(), out var command))
+      {
+        WriteError(context, $"Unknown command: {commandName}");
+        return CommandResult.Error($"Unknown command: {commandName}");
+      }
+
+      WriteOutput(context, $"{command.Name} - {command.Description}");
+      WriteOutput(context, $"Usage: {command.Usage}");
+      return CommandResult.Ok();
     }
   }
 }

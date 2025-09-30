@@ -1,121 +1,173 @@
-using System;
-using System.Text;
-using UnityEngine;
-using SampleOS.Core.CommandSystem;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
-    /// <summary>
-    /// Command to display network connections and device information.
-    /// Usage: netstat [-a|-d]
-    /// -a : Show all network information
-    /// -d : Show device information (default)
-    /// </summary>
-
-    public class NetstatCommand : ICommand
+    public class NetstatCommand : CommandBase
     {
-        private VirtualNetwork network;
+        public override string Name => "netstat";
+        public override string Description => "Display network connections and statistics";
+        public override string Usage => "netstat [-a] [-n] [-t] [-l]";
 
-        public string Name => "netstat";
-        public string Description => "Display network connections and device information";
-        public string Usage => "netstat [-a|-d]";
-
-        public NetstatCommand(VirtualNetwork network)
+        public override CommandResult Execute(string[] args, CommandContext context)
         {
-            this.network = network;
-        }
+            if (context.Network == null)
+            {
+                WriteError(context, "Network not available");
+                return CommandResult.Error("Network not available");
+            }
 
-        public void Execute(string[] args, ITerminalOutput output)
-        {
             // Parse options
             bool showAll = false;
-            bool showDevices = false;
+            bool numericOnly = false;
+            bool tcpOnly = false;
+            bool listeningOnly = false;
 
-            if (args.Length > 0)
+            foreach (var arg in args)
             {
-                foreach (string arg in args)
+                switch (arg)
                 {
-                    if (arg == "-a") showAll = true;
-                    else if (arg == "-d") showDevices = true;
-                    else if (arg == "--help" || arg == "-h")
-                    {
-                        DisplayHelp(output);
-                        return;
-                    }
-                    else
-                    {
-                        output.AppendText($"Unknown option: {arg}\n");
-                        DisplayHelp(output);
-                        return;
-                    }
+                    case "-a":
+                        showAll = true;
+                        break;
+                    case "-n":
+                        numericOnly = true;
+                        break;
+                    case "-t":
+                        tcpOnly = true;
+                        break;
+                    case "-l":
+                        listeningOnly = true;
+                        break;
+                    default:
+                        WriteError(context, $"Unknown option: {arg}");
+                        WriteError(context, Usage);
+                        return CommandResult.Error($"Unknown option: {arg}");
                 }
             }
-            else
+
+            // Get connections
+            var connections = GetConnections(context, showAll, listeningOnly);
+
+            // Display header
+            WriteOutput(context, "Proto Recv-Q Send-Q Local Address           Foreign Address         State");
+
+            // Display connections
+            foreach (var conn in connections)
             {
-                // Default behavior with no args - show devices
-                showDevices = true;
+                if (tcpOnly && conn.Protocol != "tcp")
+                    continue;
+
+                string localAddr = numericOnly ? conn.LocalAddress : ResolveAddress(conn.LocalAddress);
+                string foreignAddr = numericOnly ? conn.ForeignAddress : ResolveAddress(conn.ForeignAddress);
+
+                string line = string.Format("{0,-5} {1,6} {2,6} {3,-23} {4,-23} {5}",
+                    conn.Protocol,
+                    conn.RecvQueue,
+                    conn.SendQueue,
+                    localAddr,
+                    foreignAddr,
+                    conn.State);
+
+                WriteOutput(context, line);
             }
 
-            if (showAll || showDevices)
-            {
-                DisplayNetworkDevices(output);
-            }
+            return CommandResult.Ok();
         }
 
-        private void DisplayNetworkDevices(ITerminalOutput output)
+        private List<NetworkConnection> GetConnections(CommandContext context, bool showAll, bool listeningOnly)
         {
-            // Use original terminal color for headers
-            Color defaultColor = Color.white;
-            Color headerColor = new Color(0.5f, 0.8f, 1f); // Light blue
-            Color hostColor = new Color(0.2f, 1f, 0.2f);   // Light green
+            var connections = new List<NetworkConnection>();
 
-            // Display a header
-            output.SetColor(headerColor);
-            output.AppendText("NETWORK DEVICES\n");
-            output.AppendText("===============\n");
-            output.SetColor(defaultColor);
+            // Get local system
+            var localSystem = context.CurrentSystem ?? context.Network.GetLocalSystem();
+            string localIP = localSystem?.IPAddress ?? "127.0.0.1";
 
-            // Get devices from the network
-            var devices = network.GetNetworkDevices();
-
-            if (devices.Count == 0)
+            // Add listening services
+            if (localSystem != null)
             {
-                output.AppendText("No devices found on the network.\n");
-                return;
+                foreach (var port in localSystem.GetOpenPorts())
+                {
+                    var software = localSystem.GetSoftwareOnPort(port);
+                    connections.Add(new NetworkConnection
+                    {
+                        Protocol = "tcp",
+                        LocalAddress = $"{localIP}:{port}",
+                        ForeignAddress = "0.0.0.0:*",
+                        State = "LISTEN",
+                        RecvQueue = 0,
+                        SendQueue = 0,
+                        Process = software?.Name ?? "unknown"
+                    });
+                }
             }
 
-            // Format and display each device
-            StringBuilder table = new StringBuilder();
-
-            // Table header
-            table.AppendLine("HOST            IP ADDRESS         STATUS    TYPE");
-            table.AppendLine("--------------------------------------------------------");
-
-            foreach (var device in devices)
+            // Add established connections if showing all
+            if (showAll && !listeningOnly)
             {
-                string hostname = device.Hostname ?? "N/A";
-                hostname = hostname.PadRight(15).Substring(0, 15);
+                // Check if connected to any systems via SSH
+                if (context.CurrentSystem != null && context.CurrentSystem != context.Network.GetLocalSystem())
+                {
+                    connections.Add(new NetworkConnection
+                    {
+                        Protocol = "tcp",
+                        LocalAddress = $"{localIP}:56789",
+                        ForeignAddress = $"{context.CurrentSystem.IPAddress}:22",
+                        State = "ESTABLISHED",
+                        RecvQueue = 0,
+                        SendQueue = 0,
+                        Process = "ssh"
+                    });
+                }
 
-                string ipAddress = device.IPAddress ?? "N/A";
-                ipAddress = ipAddress.PadRight(18).Substring(0, 18);
+                // Add some typical background connections
+                connections.Add(new NetworkConnection
+                {
+                    Protocol = "tcp",
+                    LocalAddress = $"{localIP}:45123",
+                    ForeignAddress = "8.8.8.8:53",
+                    State = "ESTABLISHED",
+                    RecvQueue = 0,
+                    SendQueue = 0,
+                    Process = "systemd-resolve"
+                });
 
-                string status = "online";
-                string type = device.Type ?? "unknown";
-
-                table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type}");
+                connections.Add(new NetworkConnection
+                {
+                    Protocol = "udp",
+                    LocalAddress = $"{localIP}:68",
+                    ForeignAddress = "0.0.0.0:*",
+                    State = "",
+                    RecvQueue = 0,
+                    SendQueue = 0,
+                    Process = "dhclient"
+                });
             }
 
-            output.AppendText(table.ToString());
-            output.AppendText("\n");
+            return connections;
         }
 
-        private void DisplayHelp(ITerminalOutput output)
+        private string ResolveAddress(string address)
         {
-            output.AppendText($"Usage: {Usage}\n\n");
-            output.AppendText("Options:\n");
-            output.AppendText("  -a    Show all network information\n");
-            output.AppendText("  -d    Show device information (default)\n");
-            output.AppendText("  -h    Display this help message\n");
+            // Simple hostname resolution
+            if (address.Contains("127.0.0.1"))
+                return address.Replace("127.0.0.1", "localhost");
+            if (address.Contains("0.0.0.0"))
+                return address;
+
+            // Could expand this to resolve other known hosts
+            return address;
+        }
+
+        private class NetworkConnection
+        {
+            public string Protocol { get; set; }
+            public string LocalAddress { get; set; }
+            public string ForeignAddress { get; set; }
+            public string State { get; set; }
+            public int RecvQueue { get; set; }
+            public int SendQueue { get; set; }
+            public string Process { get; set; }
         }
     }
 }

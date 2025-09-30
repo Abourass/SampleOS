@@ -1,102 +1,105 @@
 using UnityEngine;
-using SampleOS.Core.CommandSystem;
+using System.Collections.Generic;
 
 namespace SampleOS.Core.CommandSystem.Commands.Systems
 {
-  /// <summary>
-  /// Command to quit the game with optional saving.
-  /// Usage: quit [options]
-  /// Options:
-  ///   -s, --save     Save and exit without prompting
-  ///   -n, --no-save  Exit without saving or prompting
-  /// If no options are provided, the user is prompted to save before exiting.
-  /// </summary>
-
-  public class QuitCommand : IInteractiveCommand
+  public class QuitCommand : CommandBase, IInteractiveCommand
   {
-    public string Name => "quit";
-    public string Description => "Exit the game with optional saving";
-    public string Usage => "quit [options]\n  Options:\n  -s, --save     Save and exit without prompting\n  -n, --no-save  Exit without saving or prompting";
-
     private PlayerProgressManager progressManager;
-    private bool isWaitingForInput;
+    private bool waitingForConfirmation = false;
+    private List<string> options = new List<string> { "Yes", "No" };
+    private int selectedIndex = 0;
 
-    public bool IsWaitingForInput => isWaitingForInput;
+    public override string Name => "quit";
+    public override string Description => "Exit the game";
+    public override string Usage => "quit";
+
+    public bool IsWaitingForInput => waitingForConfirmation;
 
     public QuitCommand(PlayerProgressManager progressManager)
     {
       this.progressManager = progressManager;
     }
 
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-      if (args.Length > 0)
+      if (progressManager.HasUnsavedProgress())
       {
-        string flag = args[0].ToLower();
+        waitingForConfirmation = true;
+        selectedIndex = 0;
+        DisplayConfirmation(context);
+        return CommandResult.Ok();
+      }
 
-        if (flag == "-s" || flag == "--save")
+      QuitGame(context);
+      return CommandResult.Ok();
+    }
+
+    public void ProcessInput(string input, CommandContext context)
+    {
+      if (!waitingForConfirmation)
+        return;
+
+      switch (input.ToLower())
+      {
+        case "up":
+          selectedIndex = (selectedIndex - 1 + options.Count) % options.Count;
+          DisplayConfirmation(context);
+          break;
+
+        case "down":
+          selectedIndex = (selectedIndex + 1) % options.Count;
+          DisplayConfirmation(context);
+          break;
+
+        case "enter":
+          if (selectedIndex == 0) // Yes
+          {
+            progressManager.SaveProgress();
+            QuitGame(context);
+          }
+          else // No
+          {
+            WriteOutput(context, "Quit cancelled.");
+          }
+          waitingForConfirmation = false;
+          break;
+
+        case "escape":
+          WriteOutput(context, "Quit cancelled.");
+          waitingForConfirmation = false;
+          break;
+      }
+    }
+
+    private void DisplayConfirmation(CommandContext context)
+    {
+      WriteOutput(context, "\nYou have unsaved progress. Save before quitting?");
+
+      for (int i = 0; i < options.Count; i++)
+      {
+        if (i == selectedIndex)
         {
-          // Save and exit without prompting
-          output.AppendText("Saving game...\n");
-          SaveGame();
-          output.AppendText("Game saved. Exiting game...\n");
-          QuitGame();
-          return;
+          WriteOutput(context, $"> {options[i]}");
         }
-
-        if (flag == "-n" || flag == "--no-save")
+        else
         {
-          // Exit without saving or prompting
-          output.AppendText("Exiting game without saving...\n");
-          QuitGame();
-          return;
+          WriteOutput(context, $"  {options[i]}");
         }
       }
 
-      // Default behavior - prompt the user
-      RequestInput("Do you want to save before exiting? (y/n): ", output);
+      WriteOutput(context, "\nUse arrow keys to navigate, Enter to select, Escape to cancel.");
     }
 
-    public void RequestInput(string prompt, ITerminalOutput output)
+    private void QuitGame(CommandContext context)
     {
-      output.AppendText(prompt);
-      isWaitingForInput = true;
-    }
-
-    public void ProcessInput(string input, ITerminalOutput output)
-    {
-      isWaitingForInput = false;
-
-      string response = input.Trim().ToLower();
-      if (response == "y" || response == "yes")
-      {
-        output.AppendText("Saving game...\n");
-        SaveGame();
-        output.AppendText("Game saved. Exiting game...\n");
-      }
-      else if (response == "n" || response == "no")
-      {
-        output.AppendText("Exiting game without saving...\n");
-      }
-      else
-      {
-        output.AppendText("Invalid response. Exiting game without saving...\n");
-      }
-
-      QuitGame();
-    }
-
-    private void SaveGame()
-    {
+      WriteOutput(context, "Saving progress and exiting...");
       progressManager.SaveProgress();
-    }
 
-    private void QuitGame()
-    {
 #if UNITY_EDITOR
-    UnityEditor.EditorApplication.isPlaying = false;
+      UnityEditor.EditorApplication.isPlaying = false;
 #else
-      Application.Quit();
+            Application.Quit();
 #endif
     }
   }

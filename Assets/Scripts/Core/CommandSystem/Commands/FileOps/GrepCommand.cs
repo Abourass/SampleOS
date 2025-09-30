@@ -1,98 +1,113 @@
-using System;
-using System.Text;
+using System.Linq;
 using System.Text.RegularExpressions;
-using SampleOS.Core.CommandSystem;
 
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-    /// <summary>
-    /// Command to search for patterns in text files or piped input.
-    /// Usage:
-    ///   grep <pattern> [file]          - Search for pattern in the specified file
-    ///   <command> | grep <pattern>     - Search for pattern in piped input
-    /// </summary>
-
-    public class GrepCommand : ICommand, IFileSystemCommand, IPipeableCommand
+    public class GrepCommand : CommandBase, IPipeableCommand
     {
-        private VirtualFileSystem fileSystem;
+        public override string Name => "grep";
+        public override string Description => "Search for patterns in files";
+        public override string Usage => "grep [pattern] [file...] or ... | grep [pattern]";
+        
+        public bool AcceptsPipedInput => true;
 
-        public string Name => "grep";
-        public string Description => "Search for patterns in text";
-        public string Usage => "grep <pattern> [file] or pipe text into grep <pattern>";
-
-        public GrepCommand(VirtualFileSystem fs)
+        public override CommandResult Execute(string[] args, CommandContext context)
         {
-            fileSystem = fs;
-        }
-
-        public void Execute(string[] args, ITerminalOutput output)
-        {
-            if (args.Length < 2)
+            if (args.Length == 0)
             {
-                output.AppendText($"Usage: {Usage}\n");
-                return;
+                WriteError(context, "Usage: grep [pattern] [file...] or ... | grep [pattern]");
+                return CommandResult.Error("Missing pattern");
             }
 
             string pattern = args[0];
-            string filePath = args[1];
 
-            var fileNode = fileSystem.ResolvePath(filePath);
-            if (fileNode == null)
+            // Handle piped input
+            if (HasPipedInput(context, out string pipedInput))
             {
-                output.AppendText($"Error: File not found: {filePath}\n");
-                return;
+                return SearchInText(pattern, pipedInput, context);
             }
 
-            if (fileNode.IsDirectory)
+            // Search in files
+            if (args.Length == 1)
             {
-                output.AppendText($"Error: {filePath} is a directory\n");
-                return;
+                WriteError(context, "No files specified and no piped input");
+                return CommandResult.Error("No input");
             }
 
-            // Process the file content line by line
-            FilterText(fileNode.Content, pattern, output);
+            return SearchInFiles(pattern, args.Skip(1).ToArray(), context);
         }
 
-        public void ExecuteWithInput(string[] args, ITerminalOutput output, string inputText)
-        {
-            if (args.Length < 1)
-            {
-                output.AppendText("Error: No pattern specified. Usage: grep <pattern>\n");
-                return;
-            }
-
-            string pattern = args[0];
-            FilterText(inputText, pattern, output);
-        }
-
-        private void FilterText(string text, string pattern, ITerminalOutput output)
+        private CommandResult SearchInText(string pattern, string text, CommandContext context)
         {
             try
             {
-                StringBuilder result = new StringBuilder();
-                string[] lines = text.Split('\n');
+                var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+                int matchCount = 0;
 
-                Regex regex = new Regex(pattern);
-
-                foreach (string line in lines)
+                foreach (var line in text.Split('\n'))
                 {
+                    if (context.CancellationToken.IsCancellationRequested)
+                        return CommandResult.Error("Cancelled");
+
                     if (regex.IsMatch(line))
                     {
-                        result.AppendLine(line);
+                        WriteOutput(context, line);
+                        matchCount++;
                     }
                 }
 
-                output.AppendText(result.ToString());
+                return matchCount > 0 
+                    ? CommandResult.Ok() 
+                    : CommandResult.Error("No matches", 1);
             }
-            catch (ArgumentException ex)
+            catch (System.Exception ex)
             {
-                output.AppendText($"Invalid regular expression pattern: {ex.Message}\n");
+                WriteError(context, $"Regex error: {ex.Message}");
+                return CommandResult.FromException(ex);
             }
         }
 
-        public void SetFileSystem(VirtualFileSystem fs)
+        private CommandResult SearchInFiles(string pattern, string[] files, CommandContext context)
         {
-            fileSystem = fs;
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+                int totalMatches = 0;
+
+                foreach (var file in files)
+                {
+                    var node = context.FileSystem.ResolvePath(file);
+                    if (node == null)
+                    {
+                        WriteError(context, $"File not found: {file}");
+                        continue;
+                    }
+
+                    if (node.IsDirectory)
+                    {
+                        WriteError(context, $"Is a directory: {file}");
+                        continue;
+                    }
+
+                    foreach (var line in node.Content.Split('\n'))
+                    {
+                        if (regex.IsMatch(line))
+                        {
+                            WriteOutput(context, files.Length > 1 ? $"{file}: {line}" : line);
+                            totalMatches++;
+                        }
+                    }
+                }
+
+                return totalMatches > 0 
+                    ? CommandResult.Ok() 
+                    : CommandResult.Error("No matches", 1);
+            }
+            catch (System.Exception ex)
+            {
+                WriteError(context, $"Error: {ex.Message}");
+                return CommandResult.FromException(ex);
+            }
         }
     }
 }

@@ -117,7 +117,7 @@ namespace SampleOS.Core.CommandSystem
         /// <summary>
         /// Synchronous version for non-async commands
         /// </summary>
-        public CommandResult ProcessCommand(string input, ITerminalOutput output)
+        private CommandResult ProcessCommand(string input, ITerminalOutput output)
         {
             var stdout = new DirectTerminalStream(output, Color.white);
             var stderr = new DirectTerminalStream(output, new Color(1f, 0.3f, 0.3f));
@@ -312,7 +312,16 @@ namespace SampleOS.Core.CommandSystem
                 }
                 else
                 {
-                    return ExecuteCommand(commandText, context);
+                    // For sync commands, run them directly (they're fast)
+                    var result = command.Execute(args, context);
+
+                    // Track interactive commands
+                    if (command is IInteractiveCommand interactive && interactive.IsWaitingForInput)
+                    {
+                        interactiveCommand = interactive;
+                    }
+
+                    return result;
                 }
             }
             catch (OperationCanceledException)

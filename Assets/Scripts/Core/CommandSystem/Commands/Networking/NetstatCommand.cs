@@ -1,13 +1,13 @@
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
     public class NetstatCommand : CommandBase
     {
         public override string Name => "netstat";
-        public override string Description => "Display network connections and statistics";
-        public override string Usage => "netstat [-a] [-n] [-t] [-l]";
+        public override string Description => "Display network devices and connections";
+        public override string Usage => "netstat [-a] [-d] [-c] [-n] [-t] [-l]";
 
         public override CommandResult Execute(string[] args, CommandContext context)
         {
@@ -19,35 +19,126 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
             // Parse options
             bool showAll = false;
+            bool showDevices = false;
+            bool showConnections = false;
             bool numericOnly = false;
             bool tcpOnly = false;
             bool listeningOnly = false;
 
-            foreach (var arg in args)
+            if (args.Length == 0)
             {
-                switch (arg)
+                // Default: show devices
+                showDevices = true;
+            }
+            else
+            {
+                foreach (var arg in args)
                 {
-                    case "-a":
-                        showAll = true;
-                        break;
-                    case "-n":
-                        numericOnly = true;
-                        break;
-                    case "-t":
-                        tcpOnly = true;
-                        break;
-                    case "-l":
-                        listeningOnly = true;
-                        break;
-                    default:
-                        WriteError(context, $"Unknown option: {arg}");
-                        WriteError(context, Usage);
-                        return CommandResult.Error($"Unknown option: {arg}");
+                    switch (arg)
+                    {
+                        case "-a":
+                            showAll = true;
+                            break;
+                        case "-d":
+                            showDevices = true;
+                            break;
+                        case "-c":
+                            showConnections = true;
+                            break;
+                        case "-n":
+                            numericOnly = true;
+                            break;
+                        case "-t":
+                            tcpOnly = true;
+                            break;
+                        case "-l":
+                            listeningOnly = true;
+                            break;
+                        case "-h":
+                        case "--help":
+                            DisplayHelp(context);
+                            return CommandResult.Ok();
+                        default:
+                            WriteError(context, $"Unknown option: {arg}");
+                            DisplayHelp(context);
+                            return CommandResult.Error($"Unknown option: {arg}");
+                    }
                 }
             }
 
+            // Show all means both devices and connections
+            if (showAll)
+            {
+                showDevices = true;
+                showConnections = true;
+            }
+
+            // Display devices
+            if (showDevices)
+            {
+                DisplayNetworkDevices(context);
+
+                if (showConnections)
+                {
+                    WriteOutput(context, ""); // Add spacing
+                }
+            }
+
+            // Display connections
+            if (showConnections)
+            {
+                DisplayConnections(context, numericOnly, tcpOnly, listeningOnly);
+            }
+
+            return CommandResult.Ok();
+        }
+
+        private void DisplayNetworkDevices(CommandContext context)
+        {
+            // Display a header
+            WriteOutput(context, "NETWORK DEVICES");
+            WriteOutput(context, "===============");
+
+            // Get devices from the network
+            var devices = context.Network.GetNetworkDevices();
+
+            if (devices.Count == 0)
+            {
+                WriteOutput(context, "No devices found on the network.");
+                return;
+            }
+
+            // Format and display each device
+            StringBuilder table = new StringBuilder();
+
+            // Table header
+            table.AppendLine("HOST            IP ADDRESS         STATUS    TYPE");
+            table.AppendLine("--------------------------------------------------------");
+
+            foreach (var device in devices)
+            {
+                string hostname = device.Hostname ?? "N/A";
+                hostname = hostname.PadRight(15).Substring(0, 15);
+
+                string ipAddress = device.IPAddress ?? "N/A";
+                ipAddress = ipAddress.PadRight(18).Substring(0, 18);
+
+                string status = "online";
+                string type = device.Type ?? "unknown";
+
+                table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type}");
+            }
+
+            WriteOutput(context, table.ToString().TrimEnd());
+        }
+
+        private void DisplayConnections(CommandContext context, bool numericOnly, bool tcpOnly, bool listeningOnly)
+        {
+            WriteOutput(context, "ACTIVE CONNECTIONS");
+            WriteOutput(context, "==================");
+
             // Get connections
-            var connections = GetConnections(context, showAll, listeningOnly);
+            var connections = GetConnections(context, listeningOnly);
 
             // Display header
             WriteOutput(context, "Proto Recv-Q Send-Q Local Address           Foreign Address         State");
@@ -71,11 +162,9 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
                 WriteOutput(context, line);
             }
-
-            return CommandResult.Ok();
         }
 
-        private List<NetworkConnection> GetConnections(CommandContext context, bool showAll, bool listeningOnly)
+        private List<NetworkConnection> GetConnections(CommandContext context, bool listeningOnly)
         {
             var connections = new List<NetworkConnection>();
 
@@ -102,8 +191,8 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                 }
             }
 
-            // Add established connections if showing all
-            if (showAll && !listeningOnly)
+            // Add established connections if not listening-only
+            if (!listeningOnly)
             {
                 // Check if connected to any systems via SSH
                 if (context.CurrentSystem != null && context.CurrentSystem != context.Network.GetLocalSystem())
@@ -157,6 +246,20 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
             // Could expand this to resolve other known hosts
             return address;
+        }
+
+        private void DisplayHelp(CommandContext context)
+        {
+            WriteOutput(context, $"Usage: {Usage}");
+            WriteOutput(context, "");
+            WriteOutput(context, "Options:");
+            WriteOutput(context, "  -a    Show all information (devices and connections)");
+            WriteOutput(context, "  -d    Show network devices (default)");
+            WriteOutput(context, "  -c    Show active connections");
+            WriteOutput(context, "  -n    Show numeric addresses only");
+            WriteOutput(context, "  -t    Show TCP connections only");
+            WriteOutput(context, "  -l    Show listening connections only");
+            WriteOutput(context, "  -h    Display this help message");
         }
 
         private class NetworkConnection

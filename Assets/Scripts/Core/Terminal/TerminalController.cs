@@ -4,6 +4,7 @@ using TMPro;
 using System.Collections.Generic;
 using SampleOS.Core.CommandSystem;
 using System.Threading.Tasks;
+using SampleOS.Core.FileSystem;
 
 namespace SampleOS.Core.Terminal
 {

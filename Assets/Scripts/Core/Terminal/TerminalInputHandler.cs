@@ -5,6 +5,7 @@ using System;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using SampleOS.Core.CommandSystem;
+using SampleOS.Core.FileSystem;
 
 public class TerminalInputHandler : MonoBehaviour
 {

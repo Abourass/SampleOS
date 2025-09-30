@@ -14,7 +14,6 @@ public class TabCompletionSystem
     
     // Cache for performance
     private Dictionary<string, List<string>> commandCache = new Dictionary<string, List<string>>();
-    private string lastCacheKey = "";
 
     public TabCompletionSystem(VirtualFileSystem fs, TerminalHistory hist, CommandProcessor cmdProc)
     {

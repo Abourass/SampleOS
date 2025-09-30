@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
+using SampleOS.Core.CommandSystem;
 
 /// <summary>
 /// Handles displaying text output in the terminal UI.

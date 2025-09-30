@@ -1,96 +1,103 @@
 using System.Linq;
 using System.Collections.Generic;
+using SampleOS.Core.CommandSystem;
 
-public class NetworksCommand : ICommand
+namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
-  private VirtualCity city;
-
-  public string Name => "networks";
-  public string Description => "List available networks and connection status";
-  public string Usage => "networks [--available|--connected|--discovered]";
-
-  public NetworksCommand(VirtualCity city)
+  /// <summary>
+  /// Lists available networks and connection status.
+  /// </summary>
+  public class NetworksCommand : ICommand
   {
-    this.city = city;
-  }
+    private VirtualCity city;
 
-  public void Execute(string[] args, ITerminalOutput output)
-  {
-    bool showAvailable = args.Contains("--available");
-    bool showConnected = args.Contains("--connected");
-    bool showDiscovered = args.Contains("--discovered");
+    public string Name => "networks";
+    public string Description => "List available networks and connection status";
+    public string Usage => "networks [--available|--connected|--discovered]";
 
-    if (!showAvailable && !showConnected && !showDiscovered)
+    public NetworksCommand(VirtualCity city)
     {
-      // Default: show all information
-      showAvailable = true;
-      showConnected = true;
-      showDiscovered = true;
+      this.city = city;
     }
 
-    // Get discovered network IDs
-    List<string> discoveredNetworkIds = city.GetDiscoveredNetworks();
-
-    output.AppendText("NETWORK STATUS\n");
-    output.AppendText("==============\n\n");
-
-    if (showConnected)
+    public void Execute(string[] args, ITerminalOutput output)
     {
-      var currentNetwork = city.CurrentNetwork;
-      output.AppendText($"Current Network: {currentNetwork.Metadata.Name} ({currentNetwork.NetworkId})\n");
-      output.AppendText($"IP Range: {currentNetwork.Metadata.IPRange}\n");
-      output.AppendText($"Organization: {currentNetwork.Metadata.Organization}\n");
-      output.AppendText($"Security Level: {currentNetwork.SecurityProfile.DefaultSecurityLevel}\n\n");
-    }
+      bool showAvailable = args.Contains("--available");
+      bool showConnected = args.Contains("--connected");
+      bool showDiscovered = args.Contains("--discovered");
 
-    if (showAvailable)
-    {
-      // Get connection manager for connection status
-      var connectionManager = city.GetConnectionManager();
-      var activeConnections = connectionManager.GetActiveConnections();
-
-      output.AppendText("ACCESSIBLE NETWORKS:\n");
-
-      // First list the currently connected network
-      output.AppendText($"[CONNECTED] {city.CurrentNetwork.Metadata.Name} - {city.CurrentNetwork.Metadata.Description}\n");
-
-      // Then list other networks with active connections
-      foreach (var connection in activeConnections)
+      if (!showAvailable && !showConnected && !showDiscovered)
       {
-        if (connection.TargetNetworkId != city.CurrentNetwork.NetworkId)
-        {
-          output.AppendText($"[Available] Network {connection.TargetNetworkId} - Connected via {connection.Type}\n");
-        }
+        // Default: show all information
+        showAvailable = true;
+        showConnected = true;
+        showDiscovered = true;
       }
-      output.AppendText("\n");
-    }
 
-    if (showDiscovered)
-    {
-      output.AppendText("DISCOVERED NETWORKS (Credentials Required):\n");
+      // Get discovered network IDs
+      List<string> discoveredNetworkIds = city.GetDiscoveredNetworks();
 
-      foreach (string networkId in discoveredNetworkIds)
+      output.AppendText("NETWORK STATUS\n");
+      output.AppendText("==============\n\n");
+
+      if (showConnected)
       {
-        // Skip the current network as it's already shown above
-        if (networkId == city.CurrentNetwork.NetworkId)
-          continue;
+        var currentNetwork = city.CurrentNetwork;
+        output.AppendText($"Current Network: {currentNetwork.Metadata.Name} ({currentNetwork.NetworkId})\n");
+        output.AppendText($"IP Range: {currentNetwork.Metadata.IPRange}\n");
+        output.AppendText($"Organization: {currentNetwork.Metadata.Organization}\n");
+        output.AppendText($"Security Level: {currentNetwork.SecurityProfile.DefaultSecurityLevel}\n\n");
+      }
 
-        // Skip networks that have active connections as they're shown above
-        var isConnected = city.GetConnectionManager().GetActiveConnections()
-            .Any(c => c.TargetNetworkId == networkId);
+      if (showAvailable)
+      {
+        // Get connection manager for connection status
+        var connectionManager = city.GetConnectionManager();
+        var activeConnections = connectionManager.GetActiveConnections();
 
-        if (!isConnected)
+        output.AppendText("ACCESSIBLE NETWORKS:\n");
+
+        // First list the currently connected network
+        output.AppendText($"[CONNECTED] {city.CurrentNetwork.Metadata.Name} - {city.CurrentNetwork.Metadata.Description}\n");
+
+        // Then list other networks with active connections
+        foreach (var connection in activeConnections)
         {
-          var networkInfoResult = city.GetNetworkInfo(networkId);
-          if (networkInfoResult.IsSuccess)
+          if (connection.TargetNetworkId != city.CurrentNetwork.NetworkId)
           {
-            var metadata = networkInfoResult.Data;
-            output.AppendText($"[LOCKED] {metadata.Name} - {metadata.Description}\n");
-            output.AppendText($"         Network Type: {metadata.Type}\n");
+            output.AppendText($"[Available] Network {connection.TargetNetworkId} - Connected via {connection.Type}\n");
           }
-          else
+        }
+        output.AppendText("\n");
+      }
+
+      if (showDiscovered)
+      {
+        output.AppendText("DISCOVERED NETWORKS (Credentials Required):\n");
+
+        foreach (string networkId in discoveredNetworkIds)
+        {
+          // Skip the current network as it's already shown above
+          if (networkId == city.CurrentNetwork.NetworkId)
+            continue;
+
+          // Skip networks that have active connections as they're shown above
+          var isConnected = city.GetConnectionManager().GetActiveConnections()
+              .Any(c => c.TargetNetworkId == networkId);
+
+          if (!isConnected)
           {
-            output.AppendText($"[LOCKED] Network {networkId} - Details unknown\n");
+            var networkInfoResult = city.GetNetworkInfo(networkId);
+            if (networkInfoResult.IsSuccess)
+            {
+              var metadata = networkInfoResult.Data;
+              output.AppendText($"[LOCKED] {metadata.Name} - {metadata.Description}\n");
+              output.AppendText($"         Network Type: {metadata.Type}\n");
+            }
+            else
+            {
+              output.AppendText($"[LOCKED] Network {networkId} - Details unknown\n");
+            }
           }
         }
       }

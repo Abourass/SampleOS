@@ -1,80 +1,84 @@
 using Core.Networking.Discovery;
+using SampleOS.Core.CommandSystem;
 
-public class VpnConnectCommand : ICommand
+namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
-  private VirtualCity city;
-  private PlayerCredentialManager credentialManager;
-
-  public string Name => "vpn-connect";
-  public string Description => "Connect to a network via VPN";
-  public string Usage => "vpn-connect <network-id> [--config <config-file>]";
-
-  public VpnConnectCommand(VirtualCity city, PlayerCredentialManager credentialManager)
+  public class VpnConnectCommand : ICommand
   {
-    this.city = city;
-    this.credentialManager = credentialManager;
-  }
+    private VirtualCity city;
+    private PlayerCredentialManager credentialManager;
 
-  public void Execute(string[] args, ITerminalOutput output)
-  {
-    if (args.Length < 1)
+    public string Name => "vpn-connect";
+    public string Description => "Connect to a network via VPN";
+    public string Usage => "vpn-connect <network-id> [--config <config-file>]";
+
+    public VpnConnectCommand(VirtualCity city, PlayerCredentialManager credentialManager)
     {
-      output.AppendText($"Usage: {Usage}\n");
-      return;
+      this.city = city;
+      this.credentialManager = credentialManager;
     }
 
-    string networkId = args[0];
-    string configFile = null;
-
-    // Parse config file option
-    for (int i = 1; i < args.Length; i++)
+    public void Execute(string[] args, ITerminalOutput output)
     {
-      if (args[i] == "--config" && i + 1 < args.Length)
+      if (args.Length < 1)
       {
-        configFile = args[i + 1];
-        break;
+        output.AppendText($"Usage: {Usage}\n");
+        return;
       }
-    }
 
-    output.AppendText($"Attempting VPN connection to network '{networkId}'...\n");
+      string networkId = args[0];
+      string configFile = null;
 
-    // Get credentials for this network
-    var credentials = credentialManager.GetCredentialsForNetwork(networkId);
-    if (credentials == null)
-    {
-      output.AppendText("Error: No VPN credentials found for this network.\n");
-      output.AppendText("Try searching compromised systems for configuration files or emails.\n");
-      return;
-    }
-
-    // Create a valid NetworkCredentials object
-    var networkCredentials = new NetworkCredentials(networkId)
-    {
-      VPNCredentials = new VPNCredential
+      // Parse config file option
+      for (int i = 1; i < args.Length; i++)
       {
-        NetworkId = networkId,
-        NetworkName = credentials.NetworkName,
-        Username = credentials.Username,
-        Password = credentials.Password,
-        ServerAddress = credentials.ServerAddress,
-        Protocol = credentials.Protocol
+        if (args[i] == "--config" && i + 1 < args.Length)
+        {
+          configFile = args[i + 1];
+          break;
+        }
       }
-    };
 
-    // Simulate VPN connection process
-    output.AppendText($"Connecting to VPN server {credentials.ServerAddress}...\n");
-    output.AppendText($"Authenticating with username '{credentials.Username}'...\n");
+      output.AppendText($"Attempting VPN connection to network '{networkId}'...\n");
 
-    var connectionResult = city.ConnectToNetwork(networkId, networkCredentials);
-    if (connectionResult.IsSuccess)
-    {
-      output.AppendText("VPN connection established!\n");
-      output.AppendText($"Connected to network: {connectionResult.Data.Metadata.Name}\n");
-      output.AppendText($"Your IP address is now in range: {connectionResult.Data.Metadata.IPRange}\n");
-    }
-    else
-    {
-      output.AppendText($"VPN connection failed: {connectionResult.ErrorMessage}\n");
+      // Get credentials for this network
+      var credentials = credentialManager.GetCredentialsForNetwork(networkId);
+      if (credentials == null)
+      {
+        output.AppendText("Error: No VPN credentials found for this network.\n");
+        output.AppendText("Try searching compromised systems for configuration files or emails.\n");
+        return;
+      }
+
+      // Create a valid NetworkCredentials object
+      var networkCredentials = new NetworkCredentials(networkId)
+      {
+        VPNCredentials = new VPNCredential
+        {
+          NetworkId = networkId,
+          NetworkName = credentials.NetworkName,
+          Username = credentials.Username,
+          Password = credentials.Password,
+          ServerAddress = credentials.ServerAddress,
+          Protocol = credentials.Protocol
+        }
+      };
+
+      // Simulate VPN connection process
+      output.AppendText($"Connecting to VPN server {credentials.ServerAddress}...\n");
+      output.AppendText($"Authenticating with username '{credentials.Username}'...\n");
+
+      var connectionResult = city.ConnectToNetwork(networkId, networkCredentials);
+      if (connectionResult.IsSuccess)
+      {
+        output.AppendText("VPN connection established!\n");
+        output.AppendText($"Connected to network: {connectionResult.Data.Metadata.Name}\n");
+        output.AppendText($"Your IP address is now in range: {connectionResult.Data.Metadata.IPRange}\n");
+      }
+      else
+      {
+        output.AppendText($"VPN connection failed: {connectionResult.ErrorMessage}\n");
+      }
     }
   }
 }

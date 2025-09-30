@@ -10,6 +10,7 @@ using SampleOS.Core.CommandSystem.Commands.Systems;
 using SampleOS.Core.CommandSystem.Commands.Networking;
 using SampleOS.Core.CommandSystem.Commands.Vulnerabilities;
 using System;
+using SampleOS.Core.FileSystem;
 
 namespace SampleOS.Core.CommandSystem
 {

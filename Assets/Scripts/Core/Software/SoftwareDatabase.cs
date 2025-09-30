@@ -116,6 +116,10 @@ namespace SampleOS.Core.SoftwarePackages
 
         public Software GenerateRandomSoftware(string category, DateTime systemCreationDate)
         {
+            // Handle null or empty category
+            if (string.IsNullOrEmpty(category))
+                return null;
+
             if (!softwareByCategory.TryGetValue(category, out List<SoftwareTemplate> templates))
                 return null;
 

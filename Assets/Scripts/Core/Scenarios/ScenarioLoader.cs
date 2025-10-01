@@ -26,6 +26,7 @@ public class ScenarioLoader : MonoBehaviour
     {
       // Clear existing network
       // TODO Make a more clear way to do this, maybe don't Factory pattern it
+      // Or maybe do, I'm not sure yet. Maybe clearing is the more straight forward way
       virtualNetwork.ClearNetwork();
 
       // Create devices from scenario

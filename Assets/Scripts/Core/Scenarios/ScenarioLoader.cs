@@ -25,6 +25,7 @@ public class ScenarioLoader : MonoBehaviour
     try
     {
       // Clear existing network
+      // TODO Make a more clear way to do this, maybe don't Factory pattern it
       virtualNetwork.ClearNetwork();
 
       // Create devices from scenario
@@ -47,6 +48,7 @@ public class ScenarioLoader : MonoBehaviour
   private Result<NetworkDevice> CreateDevice(DeviceDefinition def, NetworkDefinition network)
   {
     // Create the device
+    // TODO Make this method
     var device = virtualNetwork.CreateDevice(
         def.deviceName,
         def.ipAddress,
@@ -64,7 +66,7 @@ public class ScenarioLoader : MonoBehaviour
 
     // Install software
     foreach (var softwareInstall in def.installedSoftware)
-    {
+    { // TODO Create method
       var software = softwareDatabase.GetSoftware(softwareInstall.softwareId);
       if (software != null)
       {
@@ -72,7 +74,7 @@ public class ScenarioLoader : MonoBehaviour
 
         // Add vulnerabilities
         foreach (var vulnId in softwareInstall.vulnerabilityIds)
-        {
+        { // TODO create method
           var vuln = vulnerabilityDatabase.GetVulnerability(vulnId);
           if (vuln != null)
           {
@@ -91,7 +93,7 @@ public class ScenarioLoader : MonoBehaviour
   }
 
   private Result<bool> SetupFileSystem(NetworkDevice device, DeviceDefinition def)
-  {
+  { // TODO Make this method
     var fs = device.GetFileSystem();
 
     switch (def.fileSystemMode)

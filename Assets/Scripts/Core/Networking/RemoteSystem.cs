@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using SampleOS.Core.FileSystem;
+using SampleOS.Core.SoftwarePackages;
 
 public class RemoteSystem
 {

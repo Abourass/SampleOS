@@ -1,26 +1,23 @@
 using System.Linq;
 using System.Collections.Generic;
-using SampleOS.Core.CommandSystem;
+using UnityEngine;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
-  /// <summary>
-  /// Lists available networks and connection status.
-  /// </summary>
-  public class NetworksCommand : ICommand
+  public class NetworksCommand : CommandBase
   {
     private VirtualCity city;
 
-    public string Name => "networks";
-    public string Description => "List available networks and connection status";
-    public string Usage => "networks [--available|--connected|--discovered]";
+    public override string Name => "networks";
+    public override string Description => "List available networks and connection status";
+    public override string Usage => "networks [--available|--connected|--discovered]";
 
     public NetworksCommand(VirtualCity city)
     {
       this.city = city;
     }
 
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
       bool showAvailable = args.Contains("--available");
       bool showConnected = args.Contains("--connected");
@@ -34,73 +31,180 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         showDiscovered = true;
       }
 
+      // Display header
+      context.Stdout.SetColor(new Color(0.3f, 0.7f, 1f)); // Light blue
+      WriteOutput(context, "═══════════════════════════════════════════════════════════");
+      WriteOutput(context, "                    NETWORK STATUS                          ");
+      WriteOutput(context, "═══════════════════════════════════════════════════════════");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, "");
+
+      // Show current network information
+      if (showConnected)
+      {
+        DisplayCurrentNetwork(context);
+      }
+
+      // Show available/connected networks
+      if (showAvailable)
+      {
+        DisplayAvailableNetworks(context);
+      }
+
+      // Show discovered networks
+      if (showDiscovered)
+      {
+        DisplayDiscoveredNetworks(context);
+      }
+
+      return CommandResult.Ok();
+    }
+
+    private void DisplayCurrentNetwork(CommandContext context)
+    {
+      var currentNetwork = city.CurrentNetwork;
+
+      context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+      WriteOutput(context, "CURRENT NETWORK:");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, new string('─', 60));
+
+      WriteOutput(context, $"Name:         {currentNetwork.Metadata.Name}");
+      WriteOutput(context, $"Network ID:   {currentNetwork.NetworkId}");
+      WriteOutput(context, $"IP Range:     {currentNetwork.Metadata.IPRange}");
+      WriteOutput(context, $"Organization: {currentNetwork.Metadata.Organization}");
+      WriteOutput(context, $"Type:         {currentNetwork.Metadata.Type}");
+      WriteOutput(context, $"Security:     {currentNetwork.SecurityProfile.DefaultSecurityLevel}");
+      WriteOutput(context, "");
+      WriteOutput(context, $"Description:  {currentNetwork.Metadata.Description}");
+      WriteOutput(context, "");
+    }
+
+    private void DisplayAvailableNetworks(CommandContext context)
+    {
+      // Get connection manager for connection status
+      var connectionManager = city.GetConnectionManager();
+      var activeConnections = connectionManager.GetActiveConnections();
+
+      context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f)); // Light blue
+      WriteOutput(context, "ACCESSIBLE NETWORKS:");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, new string('─', 60));
+
+      // Current network is always accessible
+      context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+      WriteOutput(context, $"[CONNECTED] {city.CurrentNetwork.Metadata.Name}");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, $"            {city.CurrentNetwork.Metadata.Description}");
+      WriteOutput(context, "");
+
+      // Show other networks with active connections
+      foreach (var connection in activeConnections)
+      {
+        if (connection.TargetNetworkId != city.CurrentNetwork.NetworkId)
+        {
+          var networkInfoResult = city.GetNetworkInfo(connection.TargetNetworkId);
+
+          context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
+          WriteOutput(context, $"[AVAILABLE] {connection.TargetNetworkId}");
+          context.Stdout.SetColor(Color.white);
+
+          if (networkInfoResult.IsSuccess)
+          {
+            var metadata = networkInfoResult.Data;
+            WriteOutput(context, $"            {metadata.Name} - {metadata.Description}");
+            WriteOutput(context, $"            Type: {metadata.Type}");
+          }
+
+          WriteOutput(context, $"            Connection: {connection.Type} ({connection.Status})");
+          WriteOutput(context, $"            Quality: {connection.GetQualityScore()}%");
+          WriteOutput(context, "");
+        }
+      }
+
+      if (activeConnections.Count == 0 ||
+          activeConnections.All(c => c.TargetNetworkId == city.CurrentNetwork.NetworkId))
+      {
+        WriteOutput(context, "No other networks currently connected.");
+        WriteOutput(context, "");
+      }
+    }
+
+    private void DisplayDiscoveredNetworks(CommandContext context)
+    {
       // Get discovered network IDs
       List<string> discoveredNetworkIds = city.GetDiscoveredNetworks();
 
-      output.AppendText("NETWORK STATUS\n");
-      output.AppendText("==============\n\n");
+      context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
+      WriteOutput(context, "DISCOVERED NETWORKS:");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, new string('─', 60));
 
-      if (showConnected)
+      if (discoveredNetworkIds.Count == 0)
       {
-        var currentNetwork = city.CurrentNetwork;
-        output.AppendText($"Current Network: {currentNetwork.Metadata.Name} ({currentNetwork.NetworkId})\n");
-        output.AppendText($"IP Range: {currentNetwork.Metadata.IPRange}\n");
-        output.AppendText($"Organization: {currentNetwork.Metadata.Organization}\n");
-        output.AppendText($"Security Level: {currentNetwork.SecurityProfile.DefaultSecurityLevel}\n\n");
+        WriteOutput(context, "No additional networks discovered yet.");
+        WriteOutput(context, "");
+        WriteOutput(context, "Hints:");
+        WriteOutput(context, "  - Compromise systems and scan their files");
+        WriteOutput(context, "  - Look for VPN configurations and network diagrams");
+        WriteOutput(context, "  - Check email for network references");
+        WriteOutput(context, "");
+        return;
       }
 
-      if (showAvailable)
+      // Get connection manager to check if networks are already connected
+      var connectionManager = city.GetConnectionManager();
+      var activeConnections = connectionManager.GetActiveConnections();
+
+      foreach (string networkId in discoveredNetworkIds)
       {
-        // Get connection manager for connection status
-        var connectionManager = city.GetConnectionManager();
-        var activeConnections = connectionManager.GetActiveConnections();
+        // Skip the current network as it's already shown above
+        if (networkId == city.CurrentNetwork.NetworkId)
+          continue;
 
-        output.AppendText("ACCESSIBLE NETWORKS:\n");
+        // Check if this network has an active connection
+        var isConnected = activeConnections.Any(c => c.TargetNetworkId == networkId);
 
-        // First list the currently connected network
-        output.AppendText($"[CONNECTED] {city.CurrentNetwork.Metadata.Name} - {city.CurrentNetwork.Metadata.Description}\n");
-
-        // Then list other networks with active connections
-        foreach (var connection in activeConnections)
+        if (!isConnected)
         {
-          if (connection.TargetNetworkId != city.CurrentNetwork.NetworkId)
+          var networkInfoResult = city.GetNetworkInfo(networkId);
+
+          if (networkInfoResult.IsSuccess)
           {
-            output.AppendText($"[Available] Network {connection.TargetNetworkId} - Connected via {connection.Type}\n");
+            var metadata = networkInfoResult.Data;
+
+            context.Stdout.SetColor(new Color(0.7f, 0.7f, 0.7f)); // Gray
+            WriteOutput(context, $"[LOCKED] {metadata.Name}");
+            context.Stdout.SetColor(Color.white);
+            WriteOutput(context, $"         Network ID: {networkId}");
+            WriteOutput(context, $"         Type: {metadata.Type}");
+            WriteOutput(context, $"         Organization: {metadata.Organization}");
+            WriteOutput(context, $"         Description: {metadata.Description}");
+
+            // Show connected networks (gateways)
+            if (metadata.ConnectedNetworks != null && metadata.ConnectedNetworks.Count > 0)
+            {
+              WriteOutput(context, $"         Gateway Networks: {string.Join(", ", metadata.ConnectedNetworks)}");
+            }
+
+            WriteOutput(context, "         Status: Requires credentials or compromised gateway");
           }
-        }
-        output.AppendText("\n");
-      }
-
-      if (showDiscovered)
-      {
-        output.AppendText("DISCOVERED NETWORKS (Credentials Required):\n");
-
-        foreach (string networkId in discoveredNetworkIds)
-        {
-          // Skip the current network as it's already shown above
-          if (networkId == city.CurrentNetwork.NetworkId)
-            continue;
-
-          // Skip networks that have active connections as they're shown above
-          var isConnected = city.GetConnectionManager().GetActiveConnections()
-              .Any(c => c.TargetNetworkId == networkId);
-
-          if (!isConnected)
+          else
           {
-            var networkInfoResult = city.GetNetworkInfo(networkId);
-            if (networkInfoResult.IsSuccess)
-            {
-              var metadata = networkInfoResult.Data;
-              output.AppendText($"[LOCKED] {metadata.Name} - {metadata.Description}\n");
-              output.AppendText($"         Network Type: {metadata.Type}\n");
-            }
-            else
-            {
-              output.AppendText($"[LOCKED] Network {networkId} - Details unknown\n");
-            }
+            context.Stdout.SetColor(new Color(0.7f, 0.7f, 0.7f)); // Gray
+            WriteOutput(context, $"[LOCKED] Network {networkId}");
+            context.Stdout.SetColor(Color.white);
+            WriteOutput(context, "         Details unknown - network partially discovered");
           }
+
+          WriteOutput(context, "");
         }
       }
+
+      // Show usage hint
+      WriteOutput(context, "Use 'vpn-connect <network-id>' to connect to a discovered network.");
+      WriteOutput(context, "Note: You may need VPN credentials or a compromised gateway system.");
+      WriteOutput(context, "");
     }
   }
 }

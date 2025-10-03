@@ -1,86 +1,29 @@
-using System.IO;
-using SampleOS.Core.CommandSystem;
-
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-
-  /// <summary>
-  /// Command to create a new directory.
-  /// Usage: mkdir <directory_name>
-  /// </summary>
-  public class MkdirCommand : ICommand, IFileSystemCommand
+  public class MkdirCommand : CommandBase
   {
-    private VirtualFileSystem fileSystem;
+    public override string Name => "mkdir";
+    public override string Description => "Create a directory";
+    public override string Usage => "mkdir <directory>";
 
-    public string Name => "mkdir";
-    public string Description => "Create a new directory";
-    public string Usage => "mkdir <directory_name>";
-
-    public MkdirCommand(VirtualFileSystem fs)
-    {
-      fileSystem = fs;
-    }
-
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
       if (args.Length == 0)
       {
-        output.AppendText($"Usage: {Usage}\n");
-        return;
+        WriteError(context, "Usage: mkdir <directory>");
+        return CommandResult.Error("No directory specified");
       }
 
-      foreach (string path in args)
+      string dirPath = args[0];
+      var result = context.FileSystem.CreateDirectory(dirPath);
+
+      if (!result.IsSuccess)
       {
-        var result = CreateDirectory(path);
-
-        if (!result.IsSuccess)
-        {
-          output.AppendText($"Error: {result.ErrorMessage}\n");
-        }
-      }
-    }
-
-    private Result<bool> CreateDirectory(string path)
-    {
-      // Get the parent directory path and new directory name
-      string dirName = Path.GetFileName(path);
-      string parentPath = Path.GetDirectoryName(path);
-
-      if (string.IsNullOrEmpty(dirName))
-      {
-        return Result<bool>.Failure("Invalid directory name");
+        WriteError(context, result.ErrorMessage);
+        return CommandResult.Error(result.ErrorMessage);
       }
 
-      // Resolve the parent directory node
-      VirtualNode parentNode = string.IsNullOrEmpty(parentPath)
-          ? fileSystem.ResolvePath(".")  // Current directory
-          : fileSystem.ResolvePath(parentPath);
-
-      if (parentNode == null)
-      {
-        return Result<bool>.Failure($"Parent directory not found: {parentPath}");
-      }
-
-      if (!parentNode.IsDirectory)
-      {
-        return Result<bool>.Failure($"Not a directory: {parentPath}");
-      }
-
-      // Check if directory already exists
-      if (parentNode.Children.ContainsKey(dirName))
-      {
-        return Result<bool>.Failure($"Directory already exists: {dirName}");
-      }
-
-      // Create the new directory
-      VirtualNode newDir = new VirtualNode(dirName, true);
-      parentNode.AddChild(newDir);
-      return Result<bool>.Success(true);
-    }
-
-    public void SetFileSystem(VirtualFileSystem fs)
-    {
-      fileSystem = fs;
+      return CommandResult.Ok();
     }
   }
 }

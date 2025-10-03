@@ -1,21 +1,19 @@
-using SampleOS.Core.CommandSystem;
+using UnityEngine;
 
 namespace SampleOS.Core.CommandSystem.Commands.Systems
 {
-
-  public class ClearCommand : ICommand
+  public class ClearCommand : CommandBase
   {
-    public string Name => "clear";
-    public string Description => "Clear the terminal screen";
-    public string Usage => "clear";
+    public override string Name => "clear";
+    public override string Description => "Clears the terminal screen";
+    public override string Usage => "clear";
 
-    public ClearCommand()
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-    }
-
-    public void Execute(string[] args, ITerminalOutput output)
-    {
-      output.Clear();
+      // Note: This will need special handling in TerminalController
+      // as we can't directly clear from here anymore
+      WriteOutput(context, "\x1b[2J\x1b[H"); // ANSI clear screen codes
+      return CommandResult.Ok();
     }
   }
 }

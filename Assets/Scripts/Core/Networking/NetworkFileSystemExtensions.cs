@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Core.Networking.Discovery;
+using SampleOS.Core.FileSystem;
 
 public static class NetworkFileSystemExtensions
 {

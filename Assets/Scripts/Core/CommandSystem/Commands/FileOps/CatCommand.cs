@@ -1,71 +1,54 @@
-using SampleOS.Core.CommandSystem;
+using System.Linq;
 
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-
-  /// <summary>
-  /// Command to display the contents of a file.
-  /// Usage: cat <filename>
-  /// If used in a pipe, it outputs the piped input if no filename is provided.
-  /// </summary>
-  public class CatCommand : ICommand, IFileSystemCommand, IPipeableCommand
+  public class CatCommand : CommandBase, IPipeableCommand
   {
-    private VirtualFileSystem fileSystem;
+    public override string Name => "cat";
+    public override string Description => "Display file contents";
+    public override string Usage => "cat <file> [file...]";
 
-    public string Name => "cat";
-    public string Description => "Display the contents of a file";
-    public string Usage => "cat <filename>";
+    public bool AcceptsPipedInput => true;
 
-    public CatCommand(VirtualFileSystem fs)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-      fileSystem = fs;
-    }
+      // Handle piped input
+      if (HasPipedInput(context, out string pipedInput))
+      {
+        WriteOutput(context, pipedInput);
+        return CommandResult.Ok();
+      }
 
-    public void Execute(string[] args, ITerminalOutput output)
-    {
       if (args.Length == 0)
       {
-        output.AppendText($"Usage: {Usage}\n");
-        return;
+        WriteError(context, "Usage: cat <file> [file...]");
+        return CommandResult.Error("No files specified");
       }
 
-      foreach (string path in args)
-      {
-        var fileNode = fileSystem.ResolvePath(path);
+      bool hadErrors = false;
 
-        if (fileNode == null)
+      foreach (var filePath in args)
+      {
+        var node = context.FileSystem.ResolvePath(filePath);
+
+        if (node == null)
         {
-          output.AppendText($"Error: File not found: {path}\n");
+          WriteError(context, $"cat: {filePath}: No such file or directory");
+          hadErrors = true;
           continue;
         }
 
-        if (fileNode.IsDirectory)
+        if (node.IsDirectory)
         {
-          output.AppendText($"Error: {path} is a directory\n");
+          WriteError(context, $"cat: {filePath}: Is a directory");
+          hadErrors = true;
           continue;
         }
 
-        // Display the file content
-        output.AppendText($"{fileNode.Content}\n");
-      }
-    }
-
-    public void ExecuteWithInput(string[] args, ITerminalOutput output, string inputText)
-    {
-      // If args provided, behave like normal cat with files
-      if (args.Length > 0)
-      {
-        Execute(args, output);
-        return;
+        WriteOutput(context, node.Content);
       }
 
-      // If no args, just output the piped input
-      output.AppendText(inputText);
-    }
-
-    public void SetFileSystem(VirtualFileSystem fs)
-    {
-      fileSystem = fs;
+      return hadErrors ? CommandResult.Error("Some files could not be read", 1) : CommandResult.Ok();
     }
   }
 }

@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using SampleOS.Core.CommandSystem;
+using System.Threading.Tasks;
+using SampleOS.Core.FileSystem;
 
 namespace SampleOS.Core.Terminal
 {
@@ -67,16 +69,20 @@ namespace SampleOS.Core.Terminal
             inputHandler.FocusInput();
         }
 
-        private void ProcessCommand(string input)
+        private async void ProcessCommand(string input)
         {
+            // Check if we're in interactive mode
+            bool isInteractiveMode = commandProcessor.IsWaitingForInput;
+
             // Don't echo navigation commands from interactive mode
-            if (!commandProcessor.IsWaitingForCommandInput ||
+            if (!isInteractiveMode ||
                 (input != "up" && input != "down" && input != "enter" && input != "escape"))
             {
                 outputHandler.AppendText(input + "\n");
             }
 
-            commandProcessor.ProcessCommand(input, outputHandler);
+            // Process the command
+            await commandProcessor.ProcessCommandAsync(input, outputHandler);
 
             // Update file system reference in input handler if it changed (e.g., SSH)
             var currentFileSystem = commandProcessor.GetFileSystem();
@@ -86,8 +92,8 @@ namespace SampleOS.Core.Terminal
                 inputHandler.UpdateFileSystem(fileSystem);
             }
 
-            // Only display the standard prompt if we're not waiting for command input
-            if (!commandProcessor.IsWaitingForCommandInput)
+            // Only display the standard prompt if we're not waiting for input
+            if (!commandProcessor.IsWaitingForInput)
             {
                 outputHandler.DisplayPrompt(commandProcessor.GetCurrentPath());
             }

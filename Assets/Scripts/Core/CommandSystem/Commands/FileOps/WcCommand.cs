@@ -1,152 +1,120 @@
-using System;
-using System.Text;
-using SampleOS.Core.CommandSystem;
+using System.Linq;
 
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-    /// <summary>
-    /// Command to count lines, words, and characters in a file or piped input.
-    /// Usage:
-    ///   wc [options] [file]          - Count in the specified file
-    ///   <command> | wc [options]     - Count in piped input
-    /// Options:
-    ///   -l  Count lines only
-    ///   -w  Count words only
-    ///   -c  Count characters only
-    /// If no options are provided, all counts are displayed.
-    /// </summary>
-
-    public class WcCommand : ICommand, IFileSystemCommand, IPipeableCommand
+    public class WcCommand : CommandBase, IPipeableCommand
     {
-        private VirtualFileSystem fileSystem;
+        public override string Name => "wc";
+        public override string Description => "Count lines, words, and characters";
+        public override string Usage => "wc [-l] [-w] [-c] [file...] or ... | wc";
 
-        public string Name => "wc";
-        public string Description => "Count lines, words, and characters in a file";
-        public string Usage => "wc [options] [file] or pipe text into wc [options]\n  Options:\n  -l  Count lines only\n  -w  Count words only\n  -c  Count characters only";
+        public bool AcceptsPipedInput => true;
 
-        public WcCommand(VirtualFileSystem fs)
+        public override CommandResult Execute(string[] args, CommandContext context)
         {
-            fileSystem = fs;
-        }
-
-        public void Execute(string[] args, ITerminalOutput output)
-        {
-            if (args.Length == 0)
-            {
-                output.AppendText($"Usage: {Usage}\n");
-                return;
-            }
-
-            bool countLines = true;
-            bool countWords = true;
-            bool countChars = true;
-            string filePath = null;
+            bool showLines = false;
+            bool showWords = false;
+            bool showChars = false;
+            var files = new System.Collections.Generic.List<string>();
 
             // Parse arguments
-            foreach (string arg in args)
+            foreach (var arg in args)
             {
-                if (arg.StartsWith("-"))
+                if (arg == "-l") showLines = true;
+                else if (arg == "-w") showWords = true;
+                else if (arg == "-c") showChars = true;
+                else if (!arg.StartsWith("-")) files.Add(arg);
+            }
+
+            // If no flags specified, show all
+            if (!showLines && !showWords && !showChars)
+            {
+                showLines = showWords = showChars = true;
+            }
+
+            // Handle piped input
+            if (HasPipedInput(context, out string pipedInput))
+            {
+                DisplayCounts(pipedInput, null, showLines, showWords, showChars, context);
+                return CommandResult.Ok();
+            }
+
+            if (files.Count == 0)
+            {
+                WriteError(context, "Usage: wc [-l] [-w] [-c] [file...] or ... | wc");
+                return CommandResult.Error("No input");
+            }
+
+            // Process files
+            int totalLines = 0, totalWords = 0, totalChars = 0;
+            bool hadErrors = false;
+
+            foreach (var filePath in files)
+            {
+                var node = context.FileSystem.ResolvePath(filePath);
+
+                if (node == null)
                 {
-                    // Reset all counts when we have a specific option
-                    countLines = false;
-                    countWords = false;
-                    countChars = false;
-
-                    if (arg.Contains("l")) countLines = true;
-                    if (arg.Contains("w")) countWords = true;
-                    if (arg.Contains("c")) countChars = true;
+                    WriteError(context, $"wc: {filePath}: No such file or directory");
+                    hadErrors = true;
+                    continue;
                 }
-                else
+
+                if (node.IsDirectory)
                 {
-                    filePath = arg;
-                    break;
+                    WriteError(context, $"wc: {filePath}: Is a directory");
+                    hadErrors = true;
+                    continue;
                 }
+
+                var (lines, words, chars) = DisplayCounts(node.Content, filePath,
+                    showLines, showWords, showChars, context);
+
+                totalLines += lines;
+                totalWords += words;
+                totalChars += chars;
             }
 
-            if (filePath == null)
+            // Show totals if multiple files
+            if (files.Count > 1)
             {
-                output.AppendText("Error: No file specified\n");
-                return;
+                DisplayCountLine(totalLines, totalWords, totalChars, "total",
+                    showLines, showWords, showChars, context);
             }
 
-            var fileNode = fileSystem.ResolvePath(filePath);
-            if (fileNode == null)
-            {
-                output.AppendText($"Error: File not found: {filePath}\n");
-                return;
-            }
-
-            if (fileNode.IsDirectory)
-            {
-                output.AppendText($"Error: {filePath} is a directory\n");
-                return;
-            }
-
-            // Count and display stats
-            CountAndOutput(fileNode.Content, countLines, countWords, countChars, output);
+            return hadErrors ? CommandResult.Error("Some files could not be read", 1) : CommandResult.Ok();
         }
 
-        public void ExecuteWithInput(string[] args, ITerminalOutput output, string inputText)
+        private (int lines, int words, int chars) DisplayCounts(
+            string content, string fileName, bool showLines, bool showWords, bool showChars,
+            CommandContext context)
         {
-            bool countLines = true;
-            bool countWords = true;
-            bool countChars = true;
+            int lines = content.Split('\n').Length;
+            int words = content.Split(new[] { ' ', '\t', '\n' },
+                System.StringSplitOptions.RemoveEmptyEntries).Length;
+            int chars = content.Length;
 
-            // Parse arguments
-            if (args.Length > 0)
-            {
-                foreach (string arg in args)
-                {
-                    if (arg.StartsWith("-"))
-                    {
-                        // Reset all counts when we have a specific option
-                        countLines = false;
-                        countWords = false;
-                        countChars = false;
+            DisplayCountLine(lines, words, chars, fileName, showLines, showWords, showChars, context);
 
-                        if (arg.Contains("l")) countLines = true;
-                        if (arg.Contains("w")) countWords = true;
-                        if (arg.Contains("c")) countChars = true;
-                    }
-                }
-            }
-
-            // Count and display stats
-            CountAndOutput(inputText, countLines, countWords, countChars, output);
+            return (lines, words, chars);
         }
 
-        private void CountAndOutput(string text, bool countLines, bool countWords, bool countChars, ITerminalOutput output)
+        private void DisplayCountLine(
+            int lines, int words, int chars, string label,
+            bool showLines, bool showWords, bool showChars,
+            CommandContext context)
         {
-            int lines = 0, words = 0, chars = 0;
+            var parts = new System.Collections.Generic.List<string>();
 
-            if (countLines)
-            {
-                lines = text.Split('\n').Length;
-            }
+            if (showLines) parts.Add(lines.ToString().PadLeft(8));
+            if (showWords) parts.Add(words.ToString().PadLeft(8));
+            if (showChars) parts.Add(chars.ToString().PadLeft(8));
 
-            if (countWords)
-            {
-                words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
-            }
+            string output = string.Join("", parts);
+            if (!string.IsNullOrEmpty(label))
+                output += " " + label;
 
-            if (countChars)
-            {
-                chars = text.Length;
-            }
-
-            // Build output string based on requested counts
-            StringBuilder result = new StringBuilder();
-
-            if (countLines) result.Append($"  Lines: {lines}");
-            if (countWords) result.Append($"  Words: {words}");
-            if (countChars) result.Append($"  Chars: {chars}");
-
-            output.AppendText(result.ToString() + "\n");
-        }
-
-        public void SetFileSystem(VirtualFileSystem fs)
-        {
-            fileSystem = fs;
+            WriteOutput(context, output);
         }
     }
 }

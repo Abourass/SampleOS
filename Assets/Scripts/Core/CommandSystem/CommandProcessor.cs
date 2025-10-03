@@ -1,316 +1,446 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
+using SampleOS.Core.Terminal;
 using SampleOS.Core.CommandSystem.Commands.FileOps;
 using SampleOS.Core.CommandSystem.Commands.CLI;
 using SampleOS.Core.CommandSystem.Commands.Systems;
 using SampleOS.Core.CommandSystem.Commands.Networking;
 using SampleOS.Core.CommandSystem.Commands.Vulnerabilities;
+using System;
+using SampleOS.Core.FileSystem;
 
 namespace SampleOS.Core.CommandSystem
 {
-  /// <summary>
-  /// Processes and executes commands, manages command state, aliases, and piping.
-  /// </summary>
-  public class CommandProcessor : MonoBehaviour
-  {
-    private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
-    private Dictionary<string, string> aliases = new Dictionary<string, string>();
-    private VirtualFileSystem fileSystem;
-    private VirtualNetwork network;
-    private RemoteSystem currentSystem;
-    private PlayerVulnerabilityInventory vulnerabilityInventory;
-    private PlayerProgressManager progressManager;
-    private VirtualCity city;
-    private PlayerCredentialManager credentialManager;
-    private IInteractiveCommand pendingCommand;
-    /// <summary>
-    /// Whether there's a command waiting for user input
-    /// </summary>
-    public bool IsWaitingForCommandInput => pendingCommand != null && pendingCommand.IsWaitingForInput;
-
-    public bool LastCommandSucceeded { get; private set; } = true;
-
-    public CommandProcessor()
+    public class CommandProcessor : MonoBehaviour
     {
-      fileSystem = new VirtualFileSystem();
-      city = new VirtualCity();
-      network = city.CurrentNetwork;
-      credentialManager = new PlayerCredentialManager();
-      vulnerabilityInventory = new PlayerVulnerabilityInventory();
-      progressManager = new PlayerProgressManager(network);
+        private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
+        private Dictionary<string, string> aliases = new Dictionary<string, string>();
 
-      // -----------------//
-      // Register commands |
-      // -----------------//
+        private VirtualFileSystem fileSystem;
+        private VirtualNetwork network;
+        private RemoteSystem currentSystem;
+        private CommandEnvironment environment;
 
-      // System Commands
-      RegisterCommand(new AliasCommand(aliases));
-      RegisterCommand(new ClearCommand());
-      RegisterCommand(new HelpCommand(commands));
-      RegisterCommand(new PsCommand(this));
-      RegisterCommand(new QuitCommand(progressManager));
+        private IInteractiveCommand interactiveCommand;
+        private CancellationTokenSource cancellationSource;
 
-      // File Operation Commands
-      RegisterCommand(new CatCommand(fileSystem));
-      RegisterCommand(new CdCommand(fileSystem));
-      RegisterCommand(new GrepCommand(fileSystem));
-      RegisterCommand(new LsCommand(fileSystem));
-      RegisterCommand(new MkdirCommand(fileSystem));
-      RegisterCommand(new TouchCommand(fileSystem));
-      RegisterCommand(new WcCommand(fileSystem));
+        // Dependencies
+        private PlayerVulnerabilityInventory vulnerabilityInventory;
+        private PlayerProgressManager progressManager;
+        private VirtualCity city;
+        private PlayerCredentialManager credentialManager;
 
-      // CLI Commands
-      RegisterCommand(new GumCommand(fileSystem));
+        public bool IsWaitingForInput => interactiveCommand?.IsWaitingForInput ?? false;
+        public bool IsExecuting => cancellationSource != null;
+        public bool LastCommandSucceeded { get; private set; } = true;
 
-      // Networking Commands
-      RegisterCommand(new NetstatCommand(network));
-      RegisterCommand(new NetworksCommand(city));
-      RegisterCommand(new SshCommand(network, this));
-      RegisterCommand(new NmapCommand(network));
-      RegisterCommand(new OwnedCommand(progressManager, network));
-      RegisterCommand(new VpnConnectCommand(city, credentialManager));
+        public CommandProcessor()
+        {
+            Initialize();
+        }
 
-      // Vulnerability Commands
-      RegisterCommand(new ExploitCommand(network, this, vulnerabilityInventory, progressManager));
-      RegisterCommand(new VulnScanCommand(network, vulnerabilityInventory));
-      RegisterCommand(new VulnsCommand(vulnerabilityInventory));
+        private void Initialize()
+        {
+            // Initialize resources
+            fileSystem = new VirtualFileSystem();
+            city = new VirtualCity();
+            network = city.CurrentNetwork;
+            environment = new CommandEnvironment();
+            credentialManager = new PlayerCredentialManager();
+            vulnerabilityInventory = new PlayerVulnerabilityInventory();
+            progressManager = new PlayerProgressManager(network);
+
+            // Register commands
+            RegisterCommands();
+        }
+
+        private void RegisterCommands()
+        {
+            // System
+            Register(new AliasCommand(aliases));
+            Register(new ClearCommand());
+            Register(new HelpCommand(commands));
+            Register(new PsCommand(this));
+            Register(new QuitCommand(progressManager));
+
+            // File Operations
+            Register(new CatCommand());
+            Register(new CdCommand());
+            Register(new GrepCommand());
+            Register(new LsCommand());
+            Register(new MkdirCommand());
+            Register(new TouchCommand());
+            Register(new WcCommand());
+
+            // CLI
+            Register(new GumCommand());
+
+            // Networking
+            Register(new NetstatCommand());
+            Register(new NetworksCommand(city));
+            Register(new SshCommand(this));
+            Register(new NmapCommand());
+            Register(new OwnedCommand(progressManager));
+            Register(new VpnConnectCommand(city, credentialManager, this));
+
+            // Vulnerabilities
+            Register(new ExploitCommand(this, vulnerabilityInventory, progressManager));
+            Register(new VulnScanCommand(vulnerabilityInventory));
+            Register(new VulnsCommand(vulnerabilityInventory));
+        }
+
+        private void Register(ICommand command)
+        {
+            commands[command.Name] = command;
+        }
+
+        /// <summary>
+        /// Process command - main entry point
+        /// </summary>
+        public async Task<CommandResult> ProcessCommandAsync(
+            string input,
+            ITerminalOutput output,
+            CancellationToken cancellationToken = default)
+        {
+            // Create streams
+            var stdout = new DirectTerminalStream(output, Color.white);
+            var stderr = new DirectTerminalStream(output, new Color(1f, 0.3f, 0.3f));
+
+            // Create context
+            var context = CreateContext(stdout, stderr, cancellationToken);
+
+            return await ProcessWithContextAsync(input, context);
+        }
+
+        /// <summary>
+        /// Synchronous version for non-async commands
+        /// </summary>
+        private CommandResult ProcessCommand(string input, ITerminalOutput output)
+        {
+            var stdout = new DirectTerminalStream(output, Color.white);
+            var stderr = new DirectTerminalStream(output, new Color(1f, 0.3f, 0.3f));
+            var context = CreateContext(stdout, stderr);
+
+            return ProcessWithContext(input, context);
+        }
+
+        /// <summary>
+        /// Handle interactive command input
+        /// </summary>
+        public void ProcessInteractiveInput(string input, ITerminalOutput output)
+        {
+            if (interactiveCommand == null || !interactiveCommand.IsWaitingForInput)
+                return;
+
+            var stdout = new DirectTerminalStream(output, Color.white);
+            var stderr = new DirectTerminalStream(output, new Color(1f, 0.3f, 0.3f));
+            var context = CreateContext(stdout, stderr);
+
+            interactiveCommand.ProcessInput(input, context);
+
+            if (!interactiveCommand.IsWaitingForInput)
+            {
+                interactiveCommand = null;
+            }
+        }
+
+        private CommandContext CreateContext(
+            ITerminalStream stdout,
+            ITerminalStream stderr,
+            CancellationToken cancellationToken = default)
+        {
+            return new CommandContext(
+                stdout, stderr,
+                fileSystem, network, currentSystem,
+                cancellationToken,
+                new Progress<CommandProgress>(p =>
+                    Debug.Log($"Progress: {p.Percentage:P0} - {p.Message}")),
+                null, false, environment
+            );
+        }
+
+        private async Task<CommandResult> ProcessWithContextAsync(string input, CommandContext context)
+        {
+            // Split by conditional operators
+            var segments = SplitByConditionalOperators(input);
+            CommandResult lastResult = CommandResult.Ok();
+
+            foreach (var segment in segments)
+            {
+                if (context.CancellationToken.IsCancellationRequested)
+                    return CommandResult.Error("Cancelled");
+
+                // Check conditional logic
+                if (segment.requiresSuccess && !lastResult.Success) continue;
+                if (segment.requiresFailure && lastResult.Success) continue;
+
+                lastResult = await ProcessPipelineAsync(segment.command, context);
+            }
+
+            LastCommandSucceeded = lastResult.Success;
+            return lastResult;
+        }
+
+        private CommandResult ProcessWithContext(string input, CommandContext context)
+        {
+            var segments = SplitByConditionalOperators(input);
+            CommandResult lastResult = CommandResult.Ok();
+
+            foreach (var segment in segments)
+            {
+                if (segment.requiresSuccess && !lastResult.Success) continue;
+                if (segment.requiresFailure && lastResult.Success) continue;
+
+                lastResult = ProcessPipeline(segment.command, context);
+            }
+
+            LastCommandSucceeded = lastResult.Success;
+            return lastResult;
+        }
+
+        private async Task<CommandResult> ProcessPipelineAsync(string commandLine, CommandContext context)
+        {
+            var commands = commandLine.Split('|').Select(c => c.Trim()).ToArray();
+
+            if (commands.Length == 1)
+                return await ExecuteCommandAsync(commands[0], context);
+
+            // Process pipe chain
+            string pipedData = null;
+            CommandResult lastResult = CommandResult.Ok();
+
+            for (int i = 0; i < commands.Length; i++)
+            {
+                var (pipeContext, stdoutBuffer, stderrBuffer) = context.CreateBuffered();
+                pipeContext = pipeContext.WithPipedInput(pipedData);
+
+                lastResult = await ExecuteCommandAsync(commands[i], pipeContext);
+
+                // Last command outputs to terminal
+                if (i == commands.Length - 1)
+                {
+                    if (stdoutBuffer.HasContent)
+                        context.Stdout.Write(stdoutBuffer.Content);
+                    if (stderrBuffer.HasContent)
+                        context.Stderr.Write(stderrBuffer.Content);
+                }
+                else if (!lastResult.Success)
+                {
+                    context.Stderr.WriteLine($"Pipe broken: {lastResult.Message}");
+                    return lastResult;
+                }
+                else
+                {
+                    pipedData = stdoutBuffer.Content;
+                }
+            }
+
+            return lastResult;
+        }
+
+        private CommandResult ProcessPipeline(string commandLine, CommandContext context)
+        {
+            var commands = commandLine.Split('|').Select(c => c.Trim()).ToArray();
+
+            if (commands.Length == 1)
+                return ExecuteCommand(commands[0], context);
+
+            string pipedData = null;
+            CommandResult lastResult = CommandResult.Ok();
+
+            for (int i = 0; i < commands.Length; i++)
+            {
+                var (pipeContext, stdoutBuffer, stderrBuffer) = context.CreateBuffered();
+                pipeContext = pipeContext.WithPipedInput(pipedData);
+
+                lastResult = ExecuteCommand(commands[i], pipeContext);
+
+                if (i == commands.Length - 1)
+                {
+                    if (stdoutBuffer.HasContent)
+                        context.Stdout.Write(stdoutBuffer.Content);
+                    if (stderrBuffer.HasContent)
+                        context.Stderr.Write(stderrBuffer.Content);
+                }
+                else if (!lastResult.Success)
+                {
+                    context.Stderr.WriteLine($"Pipe broken: {lastResult.Message}");
+                    return lastResult;
+                }
+                else
+                {
+                    pipedData = stdoutBuffer.Content;
+                }
+            }
+
+            return lastResult;
+        }
+
+        private async Task<CommandResult> ExecuteCommandAsync(string commandText, CommandContext context)
+        {
+            var (commandName, args) = ParseCommand(commandText);
+
+            if (!commands.TryGetValue(commandName, out var command))
+            {
+                context.Stderr.WriteLine($"Command not found: {commandName}");
+                return CommandResult.Error($"Command not found: {commandName}");
+            }
+
+            try
+            {
+                // Check if it's async
+                if (command is IAsyncCommand asyncCommand)
+                {
+                    cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
+
+                    try
+                    {
+                        var linkedContext = new CommandContext(
+                            context.Stdout, context.Stderr, context.FileSystem, context.Network,
+                            context.CurrentSystem, cancellationSource.Token, context.Progress,
+                            context.PipedInput, context.IsInteractive, context.Environment);
+
+                        return await asyncCommand.ExecuteAsync(args, linkedContext);
+                    }
+                    finally
+                    {
+                        cancellationSource?.Dispose();
+                        cancellationSource = null;
+                    }
+                }
+                else
+                {
+                    // For sync commands, run them directly (they're fast)
+                    var result = command.Execute(args, context);
+
+                    // Track interactive commands
+                    if (command is IInteractiveCommand interactive && interactive.IsWaitingForInput)
+                    {
+                        interactiveCommand = interactive;
+                    }
+
+                    return result;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return CommandResult.Error("Cancelled");
+            }
+            catch (System.Exception ex)
+            {
+                context.Stderr.WriteLine($"Error: {ex.Message}");
+                return CommandResult.FromException(ex);
+            }
+        }
+
+        private CommandResult ExecuteCommand(string commandText, CommandContext context)
+        {
+            var (commandName, args) = ParseCommand(commandText);
+
+            if (!commands.TryGetValue(commandName, out var command))
+            {
+                context.Stderr.WriteLine($"Command not found: {commandName}");
+                return CommandResult.Error($"Command not found: {commandName}");
+            }
+
+            try
+            {
+                var result = command.Execute(args, context);
+
+                // Track interactive commands
+                if (command is IInteractiveCommand interactive && interactive.IsWaitingForInput)
+                {
+                    interactiveCommand = interactive;
+                }
+
+                return result;
+            }
+            catch (System.Exception ex)
+            {
+                context.Stderr.WriteLine($"Error: {ex.Message}");
+                return CommandResult.FromException(ex);
+            }
+        }
+
+        private (string commandName, string[] args) ParseCommand(string commandText)
+        {
+            var parts = commandText.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return ("", new string[0]);
+
+            string commandName = parts[0].ToLower();
+
+            // Handle aliases
+            if (aliases.TryGetValue(commandName, out var aliasCommand))
+            {
+                var aliasParts = aliasCommand.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+                commandName = aliasParts[0].ToLower();
+
+                var aliasArgs = aliasParts.Skip(1).ToArray();
+                var commandArgs = parts.Skip(1).ToArray();
+                var mergedArgs = aliasArgs.Concat(commandArgs).ToArray();
+
+                return (commandName, mergedArgs);
+            }
+
+            var args = parts.Skip(1).ToArray();
+            return (commandName, args);
+        }
+
+        private List<(string command, bool requiresSuccess, bool requiresFailure)> SplitByConditionalOperators(string input)
+        {
+            var segments = new List<(string, bool, bool)>();
+            var current = new System.Text.StringBuilder();
+            bool nextRequiresSuccess = false;
+            bool nextRequiresFailure = false;
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (i < input.Length - 1)
+                {
+                    if (input[i] == '&' && input[i + 1] == '&')
+                    {
+                        segments.Add((current.ToString().Trim(), nextRequiresSuccess, nextRequiresFailure));
+                        current.Clear();
+                        nextRequiresSuccess = true;
+                        nextRequiresFailure = false;
+                        i++;
+                        continue;
+                    }
+                    else if (input[i] == '|' && input[i + 1] == '|')
+                    {
+                        segments.Add((current.ToString().Trim(), nextRequiresSuccess, nextRequiresFailure));
+                        current.Clear();
+                        nextRequiresSuccess = false;
+                        nextRequiresFailure = true;
+                        i++;
+                        continue;
+                    }
+                }
+                current.Append(input[i]);
+            }
+
+            if (current.Length > 0)
+            {
+                segments.Add((current.ToString().Trim(), nextRequiresSuccess, nextRequiresFailure));
+            }
+
+            return segments;
+        }
+
+        public void CancelCurrentCommand()
+        {
+            cancellationSource?.Cancel();
+        }
+
+        public string GetCurrentPath() => fileSystem.CurrentPath;
+        public VirtualFileSystem GetFileSystem() => fileSystem;
+        public RemoteSystem GetCurrentSystem() => currentSystem;
+        public void SetCurrentSystem(RemoteSystem system) => currentSystem = system;
+        public void SetFileSystem(VirtualFileSystem fs) => fileSystem = fs;
+        public void UpdateCurrentNetwork() => network = city.CurrentNetwork;
     }
-
-    public void ProcessCommand(string input, ITerminalOutput output)
-    {
-      // If we're waiting for input for an interactive command, route input there
-      if (IsWaitingForCommandInput)
-      {
-        pendingCommand.ProcessInput(input, output);
-
-        // If command is done waiting for input, clear pending state
-        if (!pendingCommand.IsWaitingForInput)
-        {
-          pendingCommand = null;
-        }
-
-        LastCommandSucceeded = true;
-        return;
-      }
-
-      // Split the input into parts based on conditional operators
-      string[] parts = input.Split(new[] { "&&", "||", "and", "or" }, System.StringSplitOptions.None);
-      string[] operators = ExtractOperators(input);
-
-      for (int i = 0; i < parts.Length; i++)
-      {
-        string commandPart = parts[i].Trim();
-
-        // Skip execution based on the previous command's success/failure
-        if (i > 0)
-        {
-          string op = operators[i - 1];
-          if ((op == "&&" || op == "and") && !LastCommandSucceeded)
-          {
-            continue; // Skip this command if the last one failed
-          }
-          if ((op == "||" || op == "or") && LastCommandSucceeded)
-          {
-            continue; // Skip this command if the last one succeeded
-          }
-        }
-
-        // Process the current command (which may contain pipes)
-        ProcessPipedCommands(commandPart, output);
-      }
-    }
-
-    private void ProcessPipedCommands(string commandLine, ITerminalOutput output)
-    {
-      // Split by pipe symbol
-      string[] pipeCommands = commandLine.Split('|');
-
-      // If there are no pipes, execute normally
-      if (pipeCommands.Length == 1)
-      {
-        ExecuteSingleCommand(pipeCommands[0].Trim(), null, output);
-        return;
-      }
-
-      // There are pipes, execute commands in sequence
-      string pipeInput = null;
-
-      for (int i = 0; i < pipeCommands.Length; i++)
-      {
-        string cmdText = pipeCommands[i].Trim();
-
-        // Last command outputs to terminal
-        if (i == pipeCommands.Length - 1)
-        {
-          ExecuteSingleCommand(cmdText, pipeInput, output);
-        }
-        // Intermediate commands have output captured
-        else
-        {
-          var capturedOutput = new CapturedOutput();
-          ExecuteSingleCommand(cmdText, pipeInput, capturedOutput);
-          pipeInput = capturedOutput.CapturedText;
-        }
-      }
-    }
-
-    private void ExecuteSingleCommand(string commandText, string inputText, ITerminalOutput output)
-    {
-      string[] commandParts = commandText.Split(' ');
-      if (commandParts.Length == 0) return;
-
-      string commandName = commandParts[0].ToLower();
-      string[] args = new string[commandParts.Length - 1];
-      if (commandParts.Length > 1)
-      {
-        System.Array.Copy(commandParts, 1, args, 0, commandParts.Length - 1);
-      }
-
-      // Check if the command is an alias
-      if (aliases.TryGetValue(commandName, out string aliasCommand))
-      {
-        // Split the alias command into parts
-        string[] aliasParts = aliasCommand.Split(' ');
-
-        // Replace the command with the alias target
-        commandName = aliasParts[0].ToLower();
-
-        // Combine alias args with original args
-        if (aliasParts.Length > 1)
-        {
-          string[] aliasArgs = new string[aliasParts.Length - 1];
-          System.Array.Copy(aliasParts, 1, aliasArgs, 0, aliasParts.Length - 1);
-
-          // Combine the alias args and the original args
-          string[] combinedArgs = new string[aliasArgs.Length + args.Length];
-          aliasArgs.CopyTo(combinedArgs, 0);
-          args.CopyTo(combinedArgs, aliasArgs.Length);
-
-          args = combinedArgs;
-        }
-      }
-
-      if (commands.TryGetValue(commandName, out ICommand command))
-      {
-        try
-        {
-          // If we have piped input and the command supports it
-          if (inputText != null && command is IPipeableCommand pipeableCommand)
-          {
-            pipeableCommand.ExecuteWithInput(args, output, inputText);
-          }
-          else if (inputText != null)
-          {
-            // Command doesn't support piped input
-            output.AppendText($"Error: Command '{commandName}' doesn't support piped input\n");
-            LastCommandSucceeded = false;
-            return;
-          }
-          else
-          {
-            // Normal command execution
-            command.Execute(args, output);
-          }
-
-          // Check if this is an interactive command now waiting for input
-          if (command is IInteractiveCommand interactiveCommand && interactiveCommand.IsWaitingForInput)
-          {
-            pendingCommand = interactiveCommand;
-          }
-
-          LastCommandSucceeded = true;
-        }
-        catch (System.Exception ex)
-        {
-          output.AppendText($"Command error: {ex.Message}\n");
-          LastCommandSucceeded = false;
-        }
-      }
-      else
-      {
-        output.AppendText($"Command not found: {commandName}\n");
-        LastCommandSucceeded = false;
-      }
-    }
-
-    private string[] ExtractOperators(string input)
-    {
-      // Extract the operators (&&, ||, and, or) from the input string
-      List<string> operators = new List<string>();
-      int index = 0;
-
-      while (index < input.Length)
-      {
-        if (input.Substring(index).StartsWith("&&"))
-        {
-          operators.Add("&&");
-          index += 2;
-        }
-        else if (input.Substring(index).StartsWith("||"))
-        {
-          operators.Add("||");
-          index += 2;
-        }
-        else if (input.Substring(index).StartsWith("and"))
-        {
-          operators.Add("and");
-          index += 3;
-        }
-        else if (input.Substring(index).StartsWith("or"))
-        {
-          operators.Add("or");
-          index += 2;
-        }
-        else
-        {
-          index++;
-        }
-      }
-
-      return operators.ToArray();
-    }
-
-    private void RegisterCommand(ICommand command)
-    {
-      commands[command.Name] = command;
-    }
-
-    public string GetCurrentPath()
-    {
-      return fileSystem.CurrentPath;
-    }
-
-    public void SetFileSystem(VirtualFileSystem newFileSystem)
-    {
-      fileSystem = newFileSystem;
-      // Update commands with new file system
-      foreach (var entry in commands)
-      {
-        if (entry.Value is IFileSystemCommand fsCommand)
-        {
-          fsCommand.SetFileSystem(fileSystem);
-        }
-      }
-    }
-
-    public VirtualFileSystem GetFileSystem()
-    {
-      return fileSystem;
-    }
-
-    public RemoteSystem GetCurrentSystem()
-    {
-      return currentSystem;
-    }
-
-    public void SetCurrentSystem(RemoteSystem system)
-    {
-      currentSystem = system;
-    }
-
-    public void UpdateCurrentNetwork()
-    {
-      network = city.CurrentNetwork;
-    }
-  }
 }

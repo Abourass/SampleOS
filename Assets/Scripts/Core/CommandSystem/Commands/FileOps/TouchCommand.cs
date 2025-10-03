@@ -1,89 +1,29 @@
-using System;
-
 namespace SampleOS.Core.CommandSystem.Commands.FileOps
 {
-
-  /// <summary>
-  /// Command to create a new empty file or update the timestamp of an existing file.
-  /// Usage: touch <filename>
-  /// </summary>
-  public class TouchCommand : ICommand, IFileSystemCommand
+  public class TouchCommand : CommandBase
   {
-    private VirtualFileSystem fileSystem;
+    public override string Name => "touch";
+    public override string Description => "Create an empty file";
+    public override string Usage => "touch <file>";
 
-    public string Name => "touch";
-    public string Description => "Create a new empty file or update file timestamp";
-    public string Usage => "touch <filename>";
-
-    public TouchCommand(VirtualFileSystem fs)
-    {
-      fileSystem = fs;
-    }
-
-    public void Execute(string[] args, ITerminalOutput output)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
       if (args.Length == 0)
       {
-        output.AppendText($"Usage: {Usage}\n");
-        return;
+        WriteError(context, "Usage: touch <file>");
+        return CommandResult.Error("No file specified");
       }
 
-      foreach (string path in args)
+      string filePath = args[0];
+      var result = context.FileSystem.CreateFile(filePath, "");
+
+      if (!result.IsSuccess)
       {
-        var result = CreateOrUpdateFile(path);
-
-        if (!result.IsSuccess)
-        {
-          output.AppendText($"Error: {result.ErrorMessage}\n");
-        }
-      }
-    }
-
-    private Result<bool> CreateOrUpdateFile(string path)
-    {
-      // Get the directory path and filename
-      string filename = System.IO.Path.GetFileName(path);
-      string directory = System.IO.Path.GetDirectoryName(path);
-
-      if (string.IsNullOrEmpty(filename))
-      {
-        return Result<bool>.Failure("Invalid filename");
+        WriteError(context, result.ErrorMessage);
+        return CommandResult.Error(result.ErrorMessage);
       }
 
-      // Resolve the directory node
-      VirtualNode dirNode = string.IsNullOrEmpty(directory)
-          ? fileSystem.ResolvePath(".")  // Current directory
-          : fileSystem.ResolvePath(directory);
-
-      if (dirNode == null)
-      {
-        return Result<bool>.Failure($"Directory not found: {directory}");
-      }
-
-      if (!dirNode.IsDirectory)
-      {
-        return Result<bool>.Failure($"Not a directory: {directory}");
-      }
-
-      // Check if the file already exists
-      if (dirNode.Children.TryGetValue(filename, out VirtualNode existingFile))
-      {
-        // File exists, update the modification time
-        existingFile.UpdateModificationTime();
-        return Result<bool>.Success(true);
-      }
-      else
-      {
-        // Create a new empty file
-        VirtualNode newFile = new VirtualNode(filename, false, "");
-        dirNode.AddChild(newFile);
-        return Result<bool>.Success(true);
-      }
-    }
-
-    public void SetFileSystem(VirtualFileSystem fs)
-    {
-      fileSystem = fs;
+      return CommandResult.Ok();
     }
   }
 }

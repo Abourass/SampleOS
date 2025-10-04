@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Core.Networking.Discovery;
+using SampleOS.Core.Networking.Cities;
+using SampleOS.Core.Player;
 
 namespace Core.Networking.Access
 {

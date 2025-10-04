@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Core.Networking.Access;
 using Core.Networking.Discovery;
+using SampleOS.Core.Networking.Cities;
 
 public class NetworkAccessManager
 {

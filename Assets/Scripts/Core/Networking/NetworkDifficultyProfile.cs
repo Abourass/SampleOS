@@ -1,73 +1,111 @@
 using System.Collections.Generic;
+using SampleOS.Core.Devices;
 
-// Represents a predefined network configuration with specific security levels
-public class NetworkDifficultyProfile
+namespace SampleOS.Core.Networking
 {
-  public string ProfileName { get; set; }
-  public string Description { get; set; }
-  public List<SystemDefinition> SystemDefinitions { get; set; } = new List<SystemDefinition>();
-
-  // Example factory methods for predefined profiles
-  public static NetworkDifficultyProfile CreateBeginnerProfile()
+  /// <summary>
+  /// Represents a predefined network configuration with specific security levels
+  /// </summary>
+  public class NetworkDifficultyProfile
   {
-    return new NetworkDifficultyProfile
+    public string ProfileName { get; set; }
+    public string Description { get; set; }
+    public List<DeviceDefinition> DeviceDefinitions { get; set; } = new List<DeviceDefinition>();
+
+    /// <summary>
+    /// Example factory methods for predefined profiles
+    /// </summary>
+    public static NetworkDifficultyProfile CreateBeginnerProfile()
     {
-      ProfileName = "Beginner",
-      Description = "Network with mostly vulnerable systems for beginners",
-      SystemDefinitions = new List<SystemDefinition>
+      return new NetworkDifficultyProfile
       {
-        new SystemDefinition("server", "server.local", "192.168.1.10", "server", "admin", SecurityLevel.Low),
-        new SystemDefinition("webserver", "web.local", "192.168.1.11", "server", "www", SecurityLevel.VeryLow),
-        new SystemDefinition("router", "router.local", "192.168.1.1", "router", "admin", SecurityLevel.Low),
-        // Add more beginner-friendly systems...
-      }
-    };
-  }
+        ProfileName = "Beginner",
+        Description = "Network with mostly vulnerable systems for beginners",
+        DeviceDefinitions = new List<DeviceDefinition>
+                {
+                    new DeviceDefinition
+                    {
+                        DeviceId = "server-01",
+                        Hostname = "server.local",
+                        IPAddress = "192.168.1.10",
+                        DeviceTypeId = "server",
+                        SecurityLevel = SecurityLevel.Low,
+                        DefaultUsername = "admin",
+                        DefaultPassword = "password123"
+                    },
+                    new DeviceDefinition
+                    {
+                        DeviceId = "web-01",
+                        Hostname = "web.local",
+                        IPAddress = "192.168.1.11",
+                        DeviceTypeId = "server",
+                        SecurityLevel = SecurityLevel.VeryLow,
+                        DefaultUsername = "www",
+                        DefaultPassword = "webadmin"
+                    }
+                }
+      };
+    }
 
-  public static NetworkDifficultyProfile CreateExpertProfile()
-  {
-    return new NetworkDifficultyProfile
+    public static NetworkDifficultyProfile CreateExpertProfile()
     {
-      ProfileName = "Expert",
-      Description = "Network with well-secured systems for advanced players",
-      SystemDefinitions = new List<SystemDefinition>
+      return new NetworkDifficultyProfile
       {
-        new SystemDefinition("secure-server", "secure.local", "192.168.1.10", "server", "admin", SecurityLevel.VeryHigh),
-        new SystemDefinition("corp-firewall", "firewall.local", "192.168.1.1", "router", "admin", SecurityLevel.High),
-        new SystemDefinition("database", "db.local", "192.168.1.11", "server", "dbadmin", SecurityLevel.High),
-        // Add more challenging systems...
-      }
-    };
+        ProfileName = "Expert",
+        Description = "Network with well-secured systems for advanced players",
+        DeviceDefinitions = new List<DeviceDefinition>
+                {
+                    new DeviceDefinition
+                    {
+                        DeviceId = "secure-01",
+                        Hostname = "secure.local",
+                        IPAddress = "192.168.1.10",
+                        DeviceTypeId = "server",
+                        SecurityLevel = SecurityLevel.VeryHigh,
+                        DefaultUsername = "admin",
+                        DefaultPassword = null // Will need to be discovered
+                    },
+                    new DeviceDefinition
+                    {
+                        DeviceId = "fw-01",
+                        Hostname = "firewall.local",
+                        IPAddress = "192.168.1.1",
+                        DeviceTypeId = "router",
+                        SecurityLevel = SecurityLevel.High,
+                        DefaultUsername = "admin",
+                        DefaultPassword = null
+                    }
+                }
+      };
+    }
   }
-}
 
-// Defines a system to be created in a network
-public class SystemDefinition
-{
-  public string Name { get; set; }
-  public string Hostname { get; set; }
-  public string IPAddress { get; set; }
-  public string Type { get; set; }
-  public string DefaultUser { get; set; }
-  public SecurityLevel SecurityLevel { get; set; }
-
-  public SystemDefinition(string name, string hostname, string ip, string type, string user, SecurityLevel securityLevel)
+  /// <summary>
+  /// Defines configuration for creating a device
+  /// Used by DeviceFactory to instantiate devices
+  /// </summary>
+  public class DeviceDefinition
   {
-    Name = name;
-    Hostname = hostname;
-    IPAddress = ip;
-    Type = type;
-    DefaultUser = user;
-    SecurityLevel = securityLevel;
+    public string DeviceId { get; set; }
+    public string Hostname { get; set; }
+    public string IPAddress { get; set; }
+    public string DeviceTypeId { get; set; } // References DeviceTypeDatabase
+    public SecurityLevel SecurityLevel { get; set; }
+    public string DefaultUsername { get; set; }
+    public string DefaultPassword { get; set; }
+
+    // Optional overrides
+    public List<string> SoftwareOverrides { get; set; } = new List<string>();
+    public bool IsPhysicallyAccessible { get; set; } = false;
+    public string LocationId { get; set; }
   }
-}
 
-
-public enum SecurityLevel
-{
-  VeryLow,   // Extremely vulnerable systems (abandoned/legacy)
-  Low,       // Poorly maintained systems
-  Medium,    // Typical security level
-  High,      // Well-maintained systems
-  VeryHigh   // Highly secure systems (up-to-date, hardened)
+  public enum SecurityLevel
+  {
+    VeryLow,   // Extremely vulnerable systems (abandoned/legacy)
+    Low,       // Poorly maintained systems
+    Medium,    // Typical security level
+    High,      // Well-maintained systems
+    VeryHigh   // Highly secure systems (up-to-date, hardened)
+  }
 }

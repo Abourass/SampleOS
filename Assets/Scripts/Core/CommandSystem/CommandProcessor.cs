@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,19 +10,21 @@ using SampleOS.Core.CommandSystem.Commands.CLI;
 using SampleOS.Core.CommandSystem.Commands.Systems;
 using SampleOS.Core.CommandSystem.Commands.Networking;
 using SampleOS.Core.CommandSystem.Commands.Vulnerabilities;
-using System;
-using SampleOS.Core.FileSystem;
+using SampleOS.Core.Networking;
+using SampleOS.Core.World;
+using SampleOS.Core.Devices;
+using SampleOS.Core.Player;
 
 namespace SampleOS.Core.CommandSystem
 {
     public class CommandProcessor : MonoBehaviour
     {
-        private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
-        private Dictionary<string, string> aliases = new Dictionary<string, string>();
+        private Dictionary<string, ICommand> commands = new();
+        private Dictionary<string, string> aliases = new();
 
-        private VirtualFileSystem fileSystem;
-        private VirtualNetwork network;
-        private RemoteSystem currentSystem;
+        private PlayerDevice playerDevice;           // The player's laptop/phone
+        private Device currentDevice;                 // Currently connected device (player's or remote)
+        private VirtualNetwork currentNetwork;        // Current network context
         private CommandEnvironment environment;
 
         private IInteractiveCommand interactiveCommand;
@@ -30,7 +33,7 @@ namespace SampleOS.Core.CommandSystem
         // Dependencies
         private PlayerVulnerabilityInventory vulnerabilityInventory;
         private PlayerProgressManager progressManager;
-        private VirtualCity city;
+        private City city;
         private PlayerCredentialManager credentialManager;
 
         public bool IsWaitingForInput => interactiveCommand?.IsWaitingForInput ?? false;
@@ -44,14 +47,25 @@ namespace SampleOS.Core.CommandSystem
 
         private void Initialize()
         {
-            // Initialize resources
-            fileSystem = new VirtualFileSystem();
-            city = new VirtualCity();
-            network = city.CurrentNetwork;
+            // Initialize world and network
+            city = new City("metropolis", "Metropolis");
+            currentNetwork = city.CurrentNetwork;
             environment = new CommandEnvironment();
+
+            // Create player's device
+            playerDevice = DeviceFactory.CreatePlayerDevice(
+                "player_laptop",
+                "localhost",
+                PlayerDevice.DeviceForm.Laptop
+            );
+
+            // Start on player's device
+            currentDevice = playerDevice;
+
+            // Initialize player systems
             credentialManager = new PlayerCredentialManager();
             vulnerabilityInventory = new PlayerVulnerabilityInventory();
-            progressManager = new PlayerProgressManager(network);
+            progressManager = new PlayerProgressManager(currentNetwork);
 
             // Register commands
             RegisterCommands();
@@ -154,7 +168,8 @@ namespace SampleOS.Core.CommandSystem
         {
             return new CommandContext(
                 stdout, stderr,
-                fileSystem, network, currentSystem,
+                currentDevice,          // Current device (player's or remote)
+                currentNetwork,         // Current network
                 cancellationToken,
                 new Progress<CommandProgress>(p =>
                     Debug.Log($"Progress: {p.Percentage:P0} - {p.Message}")),
@@ -299,8 +314,9 @@ namespace SampleOS.Core.CommandSystem
                     try
                     {
                         var linkedContext = new CommandContext(
-                            context.Stdout, context.Stderr, context.FileSystem, context.Network,
-                            context.CurrentSystem, cancellationSource.Token, context.Progress,
+                            context.Stdout, context.Stderr,
+                            context.CurrentDevice, context.CurrentNetwork,
+                            cancellationSource.Token, context.Progress,
                             context.PipedInput, context.IsInteractive, context.Environment);
 
                         return await asyncCommand.ExecuteAsync(args, linkedContext);
@@ -436,11 +452,120 @@ namespace SampleOS.Core.CommandSystem
             cancellationSource?.Cancel();
         }
 
-        public string GetCurrentPath() => fileSystem.CurrentPath;
-        public VirtualFileSystem GetFileSystem() => fileSystem;
-        public RemoteSystem GetCurrentSystem() => currentSystem;
-        public void SetCurrentSystem(RemoteSystem system) => currentSystem = system;
-        public void SetFileSystem(VirtualFileSystem fs) => fileSystem = fs;
-        public void UpdateCurrentNetwork() => network = city.CurrentNetwork;
+        /// <summary>
+        /// Sets the current device context (for SSH, exploits, etc.)
+        /// </summary>
+        public void SetCurrentDevice(Device device)
+        {
+            if (device == null)
+            {
+                Debug.LogWarning("Attempted to set null device");
+                return;
+            }
+
+            currentDevice = device;
+
+            // Update network context if device is on a different network
+            if (!string.IsNullOrEmpty(device.NetworkId))
+            {
+                var deviceNetwork = city.GetNetwork(device.NetworkId);
+                if (deviceNetwork != null)
+                {
+                    currentNetwork = deviceNetwork;
+                }
+            }
+
+            Debug.Log($"Switched to device: {device.Hostname} ({device.IPAddress})");
+        }
+
+        /// <summary>
+        /// Gets the current device
+        /// </summary>
+        public Device GetCurrentDevice()
+        {
+            return currentDevice;
+        }
+
+        /// <summary>
+        /// Gets the player's personal device
+        /// </summary>
+        public PlayerDevice GetPlayerDevice()
+        {
+            return playerDevice;
+        }
+
+        /// <summary>
+        /// Sets the current network context
+        /// </summary>
+        public void SetCurrentNetwork(VirtualNetwork network)
+        {
+            if (network == null)
+            {
+                Debug.LogWarning("Attempted to set null network");
+                return;
+            }
+
+            currentNetwork = network;
+            Debug.Log($"Switched to network: {network.NetworkId}");
+        }
+
+        /// <summary>
+        /// Gets the current network
+        /// </summary>
+        public VirtualNetwork GetCurrentNetwork()
+        {
+            return currentNetwork;
+        }
+
+        /// <summary>
+        /// Returns to the player's device
+        /// </summary>
+        public void ReturnToPlayerDevice()
+        {
+            SetCurrentDevice(playerDevice);
+            Debug.Log("Returned to local device");
+        }
+
+        /// <summary>
+        /// Checks if currently on a remote device
+        /// </summary>
+        public bool IsOnRemoteDevice()
+        {
+            return currentDevice != playerDevice;
+        }
+
+        /// <summary>
+        /// Gets the city context
+        /// </summary>
+        public City GetCity()
+        {
+            return city;
+        }
+
+        /// <summary>
+        /// Gets credential manager
+        /// </summary>
+        public PlayerCredentialManager GetCredentialManager()
+        {
+            return credentialManager;
+        }
+
+        /// <summary>
+        /// Gets vulnerability inventory
+        /// </summary>
+        public PlayerVulnerabilityInventory GetVulnerabilityInventory()
+        {
+            return vulnerabilityInventory;
+        }
+
+        /// <summary>
+        /// Gets progress manager
+        /// </summary>
+        public PlayerProgressManager GetProgressManager()
+        {
+            return progressManager;
+        }
     }
 }
+
+

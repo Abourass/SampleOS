@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
+using SampleOS.Core.Devices;
 using SampleOS.Core.FileSystem;
+using SampleOS.Core.Networking;
 using SampleOS.Core.Terminal;
 
 namespace SampleOS.Core.CommandSystem
@@ -10,30 +13,38 @@ namespace SampleOS.Core.CommandSystem
     /// </summary>
     public class CommandContext
     {
-        // Streams
+        // I/O Streams
         public ITerminalStream Stdout { get; }
         public ITerminalStream Stderr { get; }
 
-        // Resources
-        public VirtualFileSystem FileSystem { get; }
-        public VirtualNetwork Network { get; }
-        public RemoteSystem CurrentSystem { get; }
+        // Device & Network Context
+        public Device CurrentDevice { get; }           // The device we're currently executing on
+        public VirtualNetwork CurrentNetwork { get; }   // The network we're connected to
 
-        // State
+        // Execution Control
         public CancellationToken CancellationToken { get; }
         public IProgress<CommandProgress> Progress { get; }
+
+        // Piping
         public string PipedInput { get; }
+        public bool HasPipedInput => !string.IsNullOrEmpty(PipedInput);
+
+        // Interactive Mode
         public bool IsInteractive { get; }
 
         // Environment
         public CommandEnvironment Environment { get; }
 
+        // Convenience accessors
+        public VirtualFileSystem FileSystem => CurrentDevice?.FileSystem;
+        // public string CurrentPath => Environment?.GetVariable("PWD") ?? "/";
+        public bool IsRemoteConnection => CurrentDevice != null && CurrentDevice.GetType() == typeof(RemoteDevice);
+
         public CommandContext(
             ITerminalStream stdout,
             ITerminalStream stderr,
-            VirtualFileSystem fileSystem,
-            VirtualNetwork network,
-            RemoteSystem currentSystem = null,
+            Device currentDevice,
+            VirtualNetwork currentNetwork,
             CancellationToken cancellationToken = default,
             IProgress<CommandProgress> progress = null,
             string pipedInput = null,
@@ -42,9 +53,8 @@ namespace SampleOS.Core.CommandSystem
         {
             Stdout = stdout;
             Stderr = stderr;
-            FileSystem = fileSystem;
-            Network = network;
-            CurrentSystem = currentSystem;
+            CurrentDevice = currentDevice;
+            CurrentNetwork = currentNetwork;
             CancellationToken = cancellationToken;
             Progress = progress ?? new Progress<CommandProgress>();
             PipedInput = pipedInput;
@@ -58,7 +68,7 @@ namespace SampleOS.Core.CommandSystem
         public CommandContext WithPipedInput(string input)
         {
             return new CommandContext(
-                Stdout, Stderr, FileSystem, Network, CurrentSystem,
+                Stdout, Stderr, CurrentDevice, CurrentNetwork,
                 CancellationToken, Progress, input, IsInteractive, Environment);
         }
 
@@ -69,12 +79,58 @@ namespace SampleOS.Core.CommandSystem
         {
             var stdoutBuffer = new BufferedStream();
             var stderrBuffer = new BufferedStream();
-            
+
             var context = new CommandContext(
-                stdoutBuffer, stderrBuffer, FileSystem, Network, CurrentSystem,
+                stdoutBuffer, stderrBuffer, CurrentDevice, CurrentNetwork,
                 CancellationToken, Progress, PipedInput, IsInteractive, Environment);
-            
+
             return (context, stdoutBuffer, stderrBuffer);
+        }
+
+        /// <summary>
+        /// Create a new context for a different device (e.g., after SSH)
+        /// </summary>
+        public CommandContext WithDevice(Device device)
+        {
+            return new CommandContext(
+                Stdout, Stderr, device, CurrentNetwork,
+                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
+        }
+
+        /// <summary>
+        /// Create a new context for a different network (e.g., after VPN connect)
+        /// </summary>
+        public CommandContext WithNetwork(VirtualNetwork network)
+        {
+            return new CommandContext(
+                Stdout, Stderr, CurrentDevice, network,
+                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
+        }
+
+        /// <summary>
+        /// Checks if we're currently connected to a remote device
+        /// </summary>
+        public bool IsRemoteSession => CurrentDevice is RemoteDevice;
+
+        /// <summary>
+        /// Checks if we're on the player's local device
+        /// </summary>
+        public bool IsLocalSession => CurrentDevice is PlayerDevice;
+
+        /// <summary>
+        /// Gets the current device as a RemoteDevice (if applicable)
+        /// </summary>
+        public RemoteDevice GetRemoteDevice()
+        {
+            return CurrentDevice as RemoteDevice;
+        }
+
+        /// <summary>
+        /// Gets the current device as a PlayerDevice (if applicable)
+        /// </summary>
+        public PlayerDevice GetPlayerDevice()
+        {
+            return CurrentDevice as PlayerDevice;
         }
     }
 
@@ -83,8 +139,8 @@ namespace SampleOS.Core.CommandSystem
     /// </summary>
     public class CommandEnvironment
     {
-        private readonly System.Collections.Generic.Dictionary<string, string> variables 
-            = new System.Collections.Generic.Dictionary<string, string>();
+        private readonly Dictionary<string, string> variables
+            = new Dictionary<string, string>();
 
         public string Get(string key, string defaultValue = "")
         {
@@ -99,6 +155,11 @@ namespace SampleOS.Core.CommandSystem
         public bool Has(string key)
         {
             return variables.ContainsKey(key);
+        }
+
+        public Dictionary<string, string> GetAll()
+        {
+            return new Dictionary<string, string>(variables);
         }
     }
 

@@ -12,16 +12,21 @@ namespace Core.Networking.Discovery
     public string Description { get; set; }
     public string Content { get; set; }
     public string FilePath { get; set; }
-    public string SourceSystemId { get; set; }
+    public string SourceSystemId { get; set; } // Device/system where clue was found
+    public string SourceDeviceId { get; set; } // Alias for SourceSystemId for clarity
+    public string LocationId { get; set; } // Physical location where clue can be found
     public DateTime DiscoveryTime { get; set; } = DateTime.Now;
     public Dictionary<string, string> Properties { get; set; } = new Dictionary<string, string>();
     public int ReliabilityScore { get; set; } = 100; // 0-100, how reliable this clue is
+    public bool IsDiscovered { get; set; } = false; // Whether player has found this clue yet
+
 
     public DiscoveryClue(string networkId, DiscoveryClueType type, string description)
     {
       NetworkId = networkId;
       Type = type;
       Description = description;
+      SourceDeviceId = SourceSystemId;
     }
 
     /// <summary>
@@ -84,6 +89,15 @@ namespace Core.Networking.Discovery
         default:
           return ReliabilityScore >= 50;
       }
+    }
+
+    /// <summary>
+    /// Mark this clue as discovered by the player
+    /// </summary>
+    public void MarkAsDiscovered()
+    {
+      IsDiscovered = true;
+      DiscoveryTime = DateTime.Now;
     }
   }
 

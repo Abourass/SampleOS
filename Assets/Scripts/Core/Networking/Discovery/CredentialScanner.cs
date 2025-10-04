@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
 using SampleOS.Core.SoftwarePackages;
+using SampleOS.Core.Devices;
 
 namespace Core.Networking.Discovery
 {
@@ -16,28 +17,29 @@ namespace Core.Networking.Discovery
     }
 
     /// <summary>
-    /// Scan a compromised system for credentials and network clues
+    /// Scan a compromised device for credentials and network clues
     /// </summary>
-    public ScanResults ScanSystemForCredentials(RemoteSystem system)
+    public ScanResults ScanDeviceForCredentials(Device device)
     {
       var results = new ScanResults
       {
-        SystemId = system.Hostname,
+        SystemId = device.Hostname,
+        DeviceId = device.DeviceId,
         ScanTime = DateTime.Now
       };
 
       try
       {
         // Scan common credential locations
-        ScanEmailFiles(system, results);
-        ScanBrowserData(system, results);
-        ScanConfigurationFiles(system, results);
-        ScanDocuments(system, results);
-        ScanLogFiles(system, results);
-        ScanSSHKeys(system, results);
+        ScanEmailFiles(device, results);
+        ScanBrowserData(device, results);
+        ScanConfigurationFiles(device, results);
+        ScanDocuments(device, results);
+        ScanLogFiles(device, results);
+        ScanSSHKeys(device, results);
 
         // Analyze installed software for network tools
-        ScanInstalledSoftware(system, results);
+        ScanInstalledSoftware(device, results);
 
         results.Success = true;
       }
@@ -50,7 +52,7 @@ namespace Core.Networking.Discovery
       return results;
     }
 
-    private void ScanEmailFiles(RemoteSystem system, ScanResults results)
+    private void ScanEmailFiles(Device device, ScanResults results)
     {
       var emailPaths = new[]
       {
@@ -58,11 +60,11 @@ namespace Core.Networking.Discovery
         "/home/*/Maildir/cur/*",
         "/var/mail/*",
         "/home/*/.thunderbird/*/ImapMail/*/*"
-    };
+      };
 
       foreach (var pathPattern in emailPaths)
       {
-        var filesResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var filesResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (filesResult.IsSuccess)
         {
           foreach (var file in filesResult.Data)
@@ -76,19 +78,19 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanBrowserData(RemoteSystem system, ScanResults results)
+    private void ScanBrowserData(Device device, ScanResults results)
     {
       var browserPaths = new[]
       {
-                "/home/*/.mozilla/firefox/*/logins.json",
-                "/home/*/.config/google-chrome/Default/Login Data",
-                "/home/*/.config/chromium/Default/Login Data",
-                "/home/*/Library/Safari/Passwords.plist"
-            };
+        "/home/*/.mozilla/firefox/*/logins.json",
+        "/home/*/.config/google-chrome/Default/Login Data",
+        "/home/*/.config/chromium/Default/Login Data",
+        "/home/*/Library/Safari/Passwords.plist"
+      };
 
       foreach (var pathPattern in browserPaths)
       {
-        var filesResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var filesResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (filesResult.IsSuccess)
         {
           foreach (var file in filesResult.Data)
@@ -102,21 +104,21 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanConfigurationFiles(RemoteSystem system, ScanResults results)
+    private void ScanConfigurationFiles(Device device, ScanResults results)
     {
       var configPaths = new[]
       {
-                "/etc/openvpn/*.conf",
-                "/etc/openvpn/*.ovpn",
-                "/home/*/.ssh/config",
-                "/etc/network/interfaces",
-                "/etc/netplan/*.yaml",
-                "/etc/NetworkManager/system-connections/*"
-            };
+        "/etc/openvpn/*.conf",
+        "/etc/openvpn/*.ovpn",
+        "/home/*/.ssh/config",
+        "/etc/network/interfaces",
+        "/etc/netplan/*.yaml",
+        "/etc/NetworkManager/system-connections/*"
+      };
 
       foreach (var pathPattern in configPaths)
       {
-        var filesResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var filesResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (filesResult.IsSuccess)
         {
           foreach (var file in filesResult.Data)
@@ -130,20 +132,20 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanDocuments(RemoteSystem system, ScanResults results)
+    private void ScanDocuments(Device device, ScanResults results)
     {
       var documentPaths = new[]
       {
-                "/home/*/Documents/*.txt",
-                "/home/*/Documents/*.doc*",
-                "/home/*/Desktop/*.txt",
-                "/shares/*/IT/*",
-                "/var/www/html/admin/*"
-            };
+        "/home/*/Documents/*.txt",
+        "/home/*/Documents/*.doc*",
+        "/home/*/Desktop/*.txt",
+        "/shares/*/IT/*",
+        "/var/www/html/admin/*"
+      };
 
       foreach (var pathPattern in documentPaths)
       {
-        var filesResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var filesResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (filesResult.IsSuccess)
         {
           foreach (var file in filesResult.Data)
@@ -157,19 +159,19 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanLogFiles(RemoteSystem system, ScanResults results)
+    private void ScanLogFiles(Device device, ScanResults results)
     {
       var logPaths = new[]
       {
-                "/var/log/auth.log",
-                "/var/log/syslog",
-                "/var/log/messages",
-                "/var/log/vpn.log"
-            };
+        "/var/log/auth.log",
+        "/var/log/syslog",
+        "/var/log/messages",
+        "/var/log/vpn.log"
+      };
 
       foreach (var pathPattern in logPaths)
       {
-        var filesResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var filesResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (filesResult.IsSuccess)
         {
           foreach (var file in filesResult.Data)
@@ -183,19 +185,19 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanSSHKeys(RemoteSystem system, ScanResults results)
+    private void ScanSSHKeys(Device device, ScanResults results)
     {
       var sshPaths = new[]
       {
-                "/home/*/.ssh/id_rsa",
-                "/home/*/.ssh/id_ecdsa",
-                "/home/*/.ssh/id_ed25519",
-                "/root/.ssh/id_rsa"
-            };
+        "/home/*/.ssh/id_rsa",
+        "/home/*/.ssh/id_ecdsa",
+        "/home/*/.ssh/id_ed25519",
+        "/root/.ssh/id_rsa"
+      };
 
       foreach (var pathPattern in sshPaths)
       {
-        var keysResult = system.FileSystem.FindFilesByPattern(pathPattern);
+        var keysResult = device.FileSystem.FindFilesByPattern(pathPattern);
         if (keysResult.IsSuccess)
         {
           foreach (var key in keysResult.Data)
@@ -213,9 +215,9 @@ namespace Core.Networking.Discovery
       }
     }
 
-    private void ScanInstalledSoftware(RemoteSystem system, ScanResults results)
+    private void ScanInstalledSoftware(Device device, ScanResults results)
     {
-      foreach (var software in system.InstalledSoftware)
+      foreach (var software in device.InstalledSoftware)
       {
         if (IsVPNSoftware(software))
         {
@@ -224,7 +226,8 @@ namespace Core.Networking.Discovery
               $"VPN software {software.Name} detected");
           vpnClue.Properties["SoftwareName"] = software.Name;
           vpnClue.Properties["Version"] = software.Version.ToString();
-          vpnClue.SourceSystemId = system.Hostname;
+          vpnClue.SourceSystemId = device.Hostname;
+          vpnClue.SourceDeviceId = device.DeviceId;
 
           results.DiscoveredClues.Add(vpnClue);
         }
@@ -291,55 +294,55 @@ namespace Core.Networking.Discovery
     private List<ScanPattern> InitializeScanPatterns()
     {
       return new List<ScanPattern>
-            {
-                // VPN configuration patterns
-                new ScanPattern
-                {
-                    Name = "OpenVPN Config",
-                    Regex = new Regex(@"remote\s+([^\s]+)\s+(\d+)", RegexOptions.IgnoreCase),
-                    Source = CredentialSource.Configuration,
-                    ExtractCredential = (match, filePath) => new VPNCredential
-                    {
-                        ServerAddress = match.Groups[1].Value,
-                        Port = int.Parse(match.Groups[2].Value),
-                        Protocol = "OpenVPN",
-                        DiscoverySource = filePath,
-                        NetworkId = ExtractNetworkIdFromPath(filePath)
-                    }
-                },
-                
-                // Email VPN credentials
-                new ScanPattern
-                {
-                    Name = "Email VPN Credentials",
-                    Regex = new Regex(@"VPN.*?Server:\s*([^\r\n]+).*?Username:\s*([^\r\n]+).*?Password:\s*([^\r\n]+)",
-                                    RegexOptions.IgnoreCase | RegexOptions.Singleline),
-                    Source = CredentialSource.Email,
-                    ExtractCredential = (match, filePath) => new VPNCredential
-                    {
-                        ServerAddress = match.Groups[1].Value.Trim(),
-                        Username = match.Groups[2].Value.Trim(),
-                        Password = match.Groups[3].Value.Trim(),
-                        Protocol = "OpenVPN",
-                        DiscoverySource = filePath,
-                        NetworkId = "extracted_from_email"
-                    }
-                },
-                
-                // SSH connection strings
-                new ScanPattern
-                {
-                    Name = "SSH Connection",
-                    Regex = new Regex(@"ssh\s+([^@]+)@([^\s]+)", RegexOptions.IgnoreCase),
-                    Source = CredentialSource.Any,
-                    ExtractCredential = (match, filePath) => new SSHCredential
-                    {
-                        Username = match.Groups[1].Value,
-                        Hostname = match.Groups[2].Value,
-                        DiscoverySource = filePath
-                    }
-                }
-            };
+      {
+        // VPN configuration patterns
+        new ScanPattern
+        {
+          Name = "OpenVPN Config",
+          Regex = new Regex(@"remote\s+([^\s]+)\s+(\d+)", RegexOptions.IgnoreCase),
+          Source = CredentialSource.Configuration,
+          ExtractCredential = (match, filePath) => new VPNCredential
+          {
+            ServerAddress = match.Groups[1].Value,
+            Port = int.Parse(match.Groups[2].Value),
+            Protocol = "OpenVPN",
+            DiscoverySource = filePath,
+            NetworkId = ExtractNetworkIdFromPath(filePath)
+          }
+        },
+        
+        // Email VPN credentials
+        new ScanPattern
+        {
+          Name = "Email VPN Credentials",
+          Regex = new Regex(@"VPN.*?Server:\s*([^\r\n]+).*?Username:\s*([^\r\n]+).*?Password:\s*([^\r\n]+)",
+                          RegexOptions.IgnoreCase | RegexOptions.Singleline),
+          Source = CredentialSource.Email,
+          ExtractCredential = (match, filePath) => new VPNCredential
+          {
+            ServerAddress = match.Groups[1].Value.Trim(),
+            Username = match.Groups[2].Value.Trim(),
+            Password = match.Groups[3].Value.Trim(),
+            Protocol = "OpenVPN",
+            DiscoverySource = filePath,
+            NetworkId = "extracted_from_email"
+          }
+        },
+        
+        // SSH connection strings
+        new ScanPattern
+        {
+          Name = "SSH Connection",
+          Regex = new Regex(@"ssh\s+([^@]+)@([^\s]+)", RegexOptions.IgnoreCase),
+          Source = CredentialSource.Any,
+          ExtractCredential = (match, filePath) => new SSHCredential
+          {
+            Username = match.Groups[1].Value,
+            Hostname = match.Groups[2].Value,
+            DiscoverySource = filePath
+          }
+        }
+      };
     }
 
     private bool IsVPNSoftware(Software software)
@@ -436,6 +439,7 @@ namespace Core.Networking.Discovery
   public class ScanResults
   {
     public string SystemId { get; set; }
+    public string DeviceId { get; set; } // New: Device ID for tracking
     public DateTime ScanTime { get; set; }
     public bool Success { get; set; }
     public string ErrorMessage { get; set; }

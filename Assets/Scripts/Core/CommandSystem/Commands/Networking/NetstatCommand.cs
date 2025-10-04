@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
@@ -11,7 +12,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
         public override CommandResult Execute(string[] args, CommandContext context)
         {
-            if (context.Network == null)
+            if (context.CurrentNetwork == null)
             {
                 WriteError(context, "Network not available");
                 return CommandResult.Error("Network not available");
@@ -100,7 +101,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             WriteOutput(context, "===============");
 
             // Get devices from the network
-            var devices = context.Network.GetNetworkDevices();
+            var devices = context.CurrentNetwork.GetAllDevices();
 
             if (devices.Count == 0)
             {
@@ -124,7 +125,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                 ipAddress = ipAddress.PadRight(18).Substring(0, 18);
 
                 string status = "online";
-                string type = device.Type ?? "unknown";
+                string type = device.DeviceType.Name ?? "unknown";
 
                 table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type}");
             }
@@ -168,26 +169,30 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         {
             var connections = new List<NetworkConnection>();
 
-            // Get local system
-            var localSystem = context.CurrentSystem ?? context.Network.GetLocalSystem();
-            string localIP = localSystem?.IPAddress ?? "127.0.0.1";
+            // Get current device/system
+            var currentDevice = context.CurrentDevice;
+            string localIP = currentDevice?.IPAddress ?? "127.0.0.1";
 
-            // Add listening services
-            if (localSystem != null)
+            // Add listening services if we have access to the current system
+            if (currentDevice != null)
             {
-                foreach (var port in localSystem.GetOpenPorts())
+                // Get open ports from installed software
+                foreach (var software in currentDevice.InstalledSoftware)
                 {
-                    var software = localSystem.GetSoftwareOnPort(port);
-                    connections.Add(new NetworkConnection
+                    var openPorts = software.ListeningPorts;
+                    foreach (var port in openPorts)
                     {
-                        Protocol = "tcp",
-                        LocalAddress = $"{localIP}:{port}",
-                        ForeignAddress = "0.0.0.0:*",
-                        State = "LISTEN",
-                        RecvQueue = 0,
-                        SendQueue = 0,
-                        Process = software?.Name ?? "unknown"
-                    });
+                        connections.Add(new NetworkConnection
+                        {
+                            Protocol = "tcp",
+                            LocalAddress = $"{localIP}:{port}",
+                            ForeignAddress = "0.0.0.0:*",
+                            State = "LISTEN",
+                            RecvQueue = 0,
+                            SendQueue = 0,
+                            Process = software.Name
+                        });
+                    }
                 }
             }
 
@@ -195,13 +200,16 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             if (!listeningOnly)
             {
                 // Check if connected to any systems via SSH
-                if (context.CurrentSystem != null && context.CurrentSystem != context.Network.GetLocalSystem())
+                var devices = context.CurrentNetwork.GetAllDevices();
+                var localDevice = devices.FirstOrDefault(d => d.IPAddress == localIP);
+
+                if (localDevice != null && currentDevice != null && localDevice.DeviceId != currentDevice.DeviceId)
                 {
                     connections.Add(new NetworkConnection
                     {
                         Protocol = "tcp",
                         LocalAddress = $"{localIP}:56789",
-                        ForeignAddress = $"{context.CurrentSystem.IPAddress}:22",
+                        ForeignAddress = $"{currentDevice.IPAddress}:22",
                         State = "ESTABLISHED",
                         RecvQueue = 0,
                         SendQueue = 0,

@@ -1,18 +1,19 @@
 using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
+using SampleOS.Core.World;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
   public class NetworksCommand : CommandBase
   {
-    private VirtualCity city;
+    private City city;
 
     public override string Name => "networks";
     public override string Description => "List available networks and connection status";
     public override string Usage => "networks [--available|--connected|--discovered]";
 
-    public NetworksCommand(VirtualCity city)
+    public NetworksCommand(City city)
     {
       this.city = city;
     }

@@ -1,12 +1,14 @@
 using Core.Networking.Discovery;
 using UnityEngine;
 using System.Threading;
+using SampleOS.Core.World;
+using SampleOS.Core.Networking;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
   public class VpnConnectCommand : CommandBase
   {
-    private VirtualCity city;
+    private City city;
     private PlayerCredentialManager credentialManager;
     private CommandProcessor processor;
 
@@ -14,7 +16,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
     public override string Description => "Connect to a network via VPN";
     public override string Usage => "vpn-connect <network-id> [--config <config-file>]";
 
-    public VpnConnectCommand(VirtualCity city, PlayerCredentialManager credentialManager, CommandProcessor processor)
+    public VpnConnectCommand(City city, PlayerCredentialManager credentialManager, CommandProcessor processor)
     {
       this.city = city;
       this.credentialManager = credentialManager;

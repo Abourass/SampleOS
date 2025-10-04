@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+using SampleOS.Core.Devices;
+using SampleOS.Core.SoftwarePackages;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
@@ -44,16 +46,23 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                 }
             }
 
-            // Resolve target
-            var targetSystem = context.Network?.GetSystemByHostname(target);
-            if (targetSystem == null)
+            // Resolve target using Device API
+            Device targetDevice = context.CurrentNetwork?.GetDeviceByHostname(target);
+
+            if (targetDevice == null)
+            {
+                // Try IP address
+                targetDevice = context.CurrentNetwork?.GetDeviceByIP(target);
+            }
+
+            if (targetDevice == null)
             {
                 WriteError(context, $"Failed to resolve host: {target}");
                 return CommandResult.Error("Host not found");
             }
 
             // Start scan
-            WriteOutput(context, $"Starting Nmap scan on {targetSystem.Hostname} ({targetSystem.IPAddress})");
+            WriteOutput(context, $"Starting Nmap scan on {targetDevice.Hostname} ({targetDevice.IPAddress})");
             WriteOutput(context, "");
 
             // Simulate scanning delay
@@ -69,8 +78,8 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             if (context.CancellationToken.IsCancellationRequested)
                 return CommandResult.Error("Scan cancelled");
 
-            // Get open ports
-            var openPorts = targetSystem.GetOpenPorts();
+            // Get open ports from installed software
+            var openPorts = GetOpenPorts(targetDevice);
             var scanResults = new List<PortScanResult>();
 
             // Parse port range
@@ -88,7 +97,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
                 if (openPorts.Contains(port))
                 {
-                    var software = targetSystem.GetSoftwareOnPort(port);
+                    var software = GetSoftwareOnPort(targetDevice, port);
                     scanResults.Add(new PortScanResult
                     {
                         Port = port,
@@ -112,7 +121,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             await Task.Delay(300, context.CancellationToken);
 
             // Display results
-            WriteOutput(context, $"Nmap scan report for {targetSystem.Hostname} ({targetSystem.IPAddress})");
+            WriteOutput(context, $"Nmap scan report for {targetDevice.Hostname} ({targetDevice.IPAddress})");
             WriteOutput(context, $"Host is up (latency: {Random.Range(0.001f, 0.05f):F3}s)");
 
             if (scanResults.Count == 0)
@@ -145,6 +154,40 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
             ReportProgress(context, 1.0f, "Scan complete");
             return CommandResult.Ok();
+        }
+
+        /// <summary>
+        /// Gets list of open ports from device's installed software
+        /// </summary>
+        private List<int> GetOpenPorts(Device device)
+        {
+            var ports = new List<int>();
+
+            foreach (var software in device.InstalledSoftware)
+            {
+                // Check if software has listening ports
+                if (software.ListeningPorts != null && software.ListeningPorts.Count > 0)
+                {
+                    ports.AddRange(software.ListeningPorts);
+                }
+            }
+
+            return ports.Distinct().ToList();
+        }
+
+        /// <summary>
+        /// Finds which software is listening on a specific port
+        /// </summary>
+        private Software GetSoftwareOnPort(Device device, int port)
+        {
+            foreach (var software in device.InstalledSoftware)
+            {
+                if (software.ListeningPorts != null && software.ListeningPorts.Contains(port))
+                {
+                    return software;
+                }
+            }
+            return null;
         }
 
         private List<int> ParsePortRange(string range)

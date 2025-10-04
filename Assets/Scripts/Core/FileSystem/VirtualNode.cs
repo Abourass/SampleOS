@@ -190,5 +190,15 @@ namespace SampleOS.Core.FileSystem
     {
       ModificationTime = DateTime.UtcNow;
     }
+
+    public VirtualNode GetRoot()
+    {
+      VirtualNode current = this;
+      while (current.Parent != null)
+      {
+        current = current.Parent;
+      }
+      return current;
+    }
   }
 }

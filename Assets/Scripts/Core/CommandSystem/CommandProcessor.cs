@@ -14,6 +14,7 @@ using SampleOS.Core.Networking;
 using SampleOS.Core.World;
 using SampleOS.Core.Devices;
 using SampleOS.Core.Player;
+using SampleOS.Core.Session;
 
 namespace SampleOS.Core.CommandSystem
 {
@@ -24,13 +25,14 @@ namespace SampleOS.Core.CommandSystem
 
         private PlayerDevice playerDevice;           // The player's laptop/phone
         private Device currentDevice;                 // Currently connected device (player's or remote)
-        private VirtualNetwork currentNetwork;        // Current network context
         private CommandEnvironment environment;
 
         private IInteractiveCommand interactiveCommand;
         private CancellationTokenSource cancellationSource;
 
         // Dependencies
+        private GameWorld gameWorld;
+        private PlayerSession session;
         private PlayerVulnerabilityInventory vulnerabilityInventory;
         private PlayerProgressManager progressManager;
         private City city;
@@ -49,7 +51,9 @@ namespace SampleOS.Core.CommandSystem
         {
             // Initialize world and network
             city = new City("metropolis", "Metropolis");
-            currentNetwork = city.CurrentNetwork;
+            environment = new CommandEnvironment();
+            gameWorld.RegisterCity(city);
+
             environment = new CommandEnvironment();
 
             // Create player's device
@@ -59,13 +63,15 @@ namespace SampleOS.Core.CommandSystem
                 PlayerDevice.DeviceForm.Laptop
             );
 
+            gameWorld.RegisterDevice(playerDevice);
+
             // Start on player's device
             currentDevice = playerDevice;
 
             // Initialize player systems
             credentialManager = new PlayerCredentialManager();
             vulnerabilityInventory = new PlayerVulnerabilityInventory();
-            progressManager = new PlayerProgressManager(currentNetwork);
+            progressManager = new PlayerProgressManager(city.CurrentNetwork);
 
             // Register commands
             RegisterCommands();
@@ -95,10 +101,10 @@ namespace SampleOS.Core.CommandSystem
             // Networking
             Register(new NetstatCommand());
             Register(new NetworksCommand(city));
-            Register(new SshCommand(this));
+            Register(new SshCommand(this, session, gameWorld));
             Register(new NmapCommand());
             Register(new OwnedCommand(progressManager));
-            Register(new VpnConnectCommand(city, credentialManager, this));
+            Register(new VpnConnectCommand(city, credentialManager, this, session, gameWorld));
 
             // Vulnerabilities
             Register(new ExploitCommand(this, vulnerabilityInventory, progressManager));
@@ -169,7 +175,7 @@ namespace SampleOS.Core.CommandSystem
             return new CommandContext(
                 stdout, stderr,
                 currentDevice,          // Current device (player's or remote)
-                currentNetwork,         // Current network
+                city.CurrentNetwork, // Current network
                 cancellationToken,
                 new Progress<CommandProgress>(p =>
                     Debug.Log($"Progress: {p.Percentage:P0} - {p.Message}")),
@@ -465,16 +471,6 @@ namespace SampleOS.Core.CommandSystem
 
             currentDevice = device;
 
-            // Update network context if device is on a different network
-            if (!string.IsNullOrEmpty(device.NetworkId))
-            {
-                var deviceNetwork = city.GetNetwork(device.NetworkId);
-                if (deviceNetwork != null)
-                {
-                    currentNetwork = deviceNetwork;
-                }
-            }
-
             Debug.Log($"Switched to device: {device.Hostname} ({device.IPAddress})");
         }
 
@@ -495,26 +491,11 @@ namespace SampleOS.Core.CommandSystem
         }
 
         /// <summary>
-        /// Sets the current network context
-        /// </summary>
-        public void SetCurrentNetwork(VirtualNetwork network)
-        {
-            if (network == null)
-            {
-                Debug.LogWarning("Attempted to set null network");
-                return;
-            }
-
-            currentNetwork = network;
-            Debug.Log($"Switched to network: {network.NetworkId}");
-        }
-
-        /// <summary>
         /// Gets the current network
         /// </summary>
         public VirtualNetwork GetCurrentNetwork()
         {
-            return currentNetwork;
+            return city.CurrentNetwork;
         }
 
         /// <summary>

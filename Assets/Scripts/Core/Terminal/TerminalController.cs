@@ -255,7 +255,7 @@ namespace SampleOS.Core.Terminal
         /// </summary>
         public List<string> GetCommandHistory()
         {
-            return history.GetHistory();
+            return new List<string>(history.GetAllCommands());
         }
 
         /// <summary>

@@ -22,6 +22,11 @@ public class PromptConfig : ScriptableObject
   public Color failureBackground = new Color(0.8f, 0.2f, 0.2f);
   public Color promptColor = Color.white;
 
+
+  [Header("Remote Connection Colors")]
+  public Color remoteUserColor = new Color(0.2f, 0.8f, 0.2f); // Green for remote user
+  public Color remotePathColor = new Color(0.1f, 0.6f, 0.1f); // Darker green for remote path
+
   [Header("Icons")]
   public string userIcon = "👤";
   public string dirIcon = "📁";

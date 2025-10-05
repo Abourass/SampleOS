@@ -49,6 +49,10 @@ namespace SampleOS.Core.CommandSystem
 
         private void Initialize()
         {
+            // Initialize game world first
+            gameWorld = new GameWorld();
+            session = new PlayerSession();
+
             // Initialize world and network
             city = new City("metropolis", "Metropolis");
             environment = new CommandEnvironment();

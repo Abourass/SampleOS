@@ -144,6 +144,9 @@ public class TabCompletionSystem
     /// </summary>
     private string GetFileCompletion(string partial)
     {
+        if (fileSystem == null)
+            return null;
+
         // Handle absolute vs relative paths
         string searchPath = "/";
         string searchPattern = partial;

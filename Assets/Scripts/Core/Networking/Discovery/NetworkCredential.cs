@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Core.Networking.Discovery
+namespace SampleOS.Core.Networking.Discovery
 {
   public enum CredentialType
   {

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Core.Networking.Discovery
+namespace SampleOS.Core.Networking.Discovery
 {
   [Serializable]
   public class DiscoveryClue

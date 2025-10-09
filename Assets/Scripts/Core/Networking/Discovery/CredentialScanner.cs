@@ -5,7 +5,7 @@ using System.Linq;
 using SampleOS.Core.SoftwarePackages;
 using SampleOS.Core.Devices;
 
-namespace Core.Networking.Discovery
+namespace SampleOS.Core.Networking.Discovery
 {
   public class CredentialScanner
   {

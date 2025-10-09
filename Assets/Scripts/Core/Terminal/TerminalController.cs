@@ -3,10 +3,10 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using SampleOS.Core.CommandSystem;
-using System.Threading.Tasks;
 using SampleOS.Core.FileSystem;
-using SampleOS.Core.Session;
 using SampleOS.Core.Devices;
+using SampleOS.Core.Services;
+using System.Threading;
 
 namespace SampleOS.Core.Terminal
 {
@@ -25,37 +25,75 @@ namespace SampleOS.Core.Terminal
         private TerminalOutputHandler outputHandler;
         private TerminalHistory history;
         private CommandProcessor commandProcessor;
-        private PlayerSession session;
 
-        // Current device context
+        // Service references
+        private IPlayerStateService playerState;
+        private IHackingSessionService hackingSession;
+        private IWorldService worldService;
+
+        // Current device context (cached from services)
         private Device currentDevice;
         private VirtualFileSystem currentFileSystem;
 
-        private void Awake()
+        // Interactive mode tracking
+        private bool isInteractiveMode;
+        private CancellationTokenSource commandCancellation;
+
+        #region Initialization
+
+        private void ApplyFontSettings()
         {
-            // Apply the Nerd Font to text components
             if (nerdFontAsset != null)
             {
                 outputText.font = nerdFontAsset;
 
-                // Also apply to the input field text
                 if (inputField.textComponent != null)
                 {
                     inputField.textComponent.font = nerdFontAsset;
                 }
             }
+        }
 
-            // Find or create command processor
-            commandProcessor = FindFirstObjectByType<CommandProcessor>();
-            if (commandProcessor == null)
+        private bool ValidateServices()
+        {
+            // Check if core services are registered
+            return ServiceLocator.Instance.IsRegistered<IPlayerStateService>() &&
+                    ServiceLocator.Instance.IsRegistered<IHackingSessionService>() &&
+                    ServiceLocator.Instance.IsRegistered<IWorldService>();
+        }
+
+        private void InitializeTerminal()
+        {
+            outputHandler.DisplayWelcomeMessage(config.welcomeMessage);
+            UpdatePrompt();
+            inputHandler.FocusInput();
+
+            // Trigger terminal opened event
+            GameEvents.Instance.Trigger(GameEventType.TerminalOpened, this);
+        }
+
+        #endregion
+
+        private void Awake()
+        {
+            // Apply the Nerd Font to text components
+            ApplyFontSettings();
+
+            // Wait for services to be initialized
+            if (!ValidateServices())
             {
-                var processorObj = new GameObject("CommandProcessor");
-                commandProcessor = processorObj.AddComponent<CommandProcessor>();
+                Debug.LogError("Required services not initialized! Make sure GameStateManager starts first.");
+                enabled = false;
+                return;
             }
 
-            // Get initial device and file system from command processor
-            currentDevice = commandProcessor.GetCurrentDevice();
-            currentFileSystem = currentDevice?.FileSystem;
+            // Get service references
+            playerState = ServiceLocator.Instance.Get<IPlayerStateService>();
+            hackingSession = ServiceLocator.Instance.Get<IHackingSessionService>();
+            worldService = ServiceLocator.Instance.Get<IWorldService>();
+
+            // Create command processor
+            commandProcessor = new CommandProcessor();
 
             outputHandler = new TerminalOutputHandler(
                 outputText,
@@ -65,6 +103,9 @@ namespace SampleOS.Core.Terminal
                 this
             );
             history = new TerminalHistory();
+
+            // Get current device context from services
+            UpdateDeviceContext();
 
             // Initialize the input handler with the required references including file system
             if (inputHandler == null)
@@ -92,14 +133,11 @@ namespace SampleOS.Core.Terminal
         private void OnDestroy()
         {
             UnsubscribeFromDeviceChanges();
+            commandCancellation?.Cancel();
+            commandCancellation?.Dispose();
         }
 
-        private void InitializeTerminal()
-        {
-            outputHandler.DisplayWelcomeMessage(config.welcomeMessage);
-            UpdatePrompt();
-            inputHandler.FocusInput();
-        }
+        #region Command Processing
 
         private async void ProcessCommand(string input)
         {
@@ -128,12 +166,15 @@ namespace SampleOS.Core.Terminal
             inputHandler.FocusInput();
         }
 
+        #endregion
+
+        #region Device Context Management
         /// <summary>
         /// Updates the device context if it changed
         /// </summary>
         private void UpdateDeviceContext()
         {
-            var newDevice = commandProcessor.GetCurrentDevice();
+            var newDevice = hackingSession.CurrentDevice;
 
             if (newDevice != currentDevice)
             {
@@ -161,6 +202,8 @@ namespace SampleOS.Core.Terminal
                         new Color(0.7f, 0.7f, 1f) // Blue for local
                     );
                 }
+
+                UpdatePrompt();
             }
         }
 
@@ -200,6 +243,8 @@ namespace SampleOS.Core.Terminal
         {
             // Unsubscribe from any events
         }
+
+        #endregion
 
         /// <summary>
         /// Get the current device being used

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using Core.Networking.Access;
-using Core.Networking.Discovery;
+using SampleOS.Core.Networking.Access;
+using SampleOS.Core.Networking.Discovery;
 using SampleOS.Core.Networking;
 using SampleOS.Core.Devices;
 using UnityEngine;

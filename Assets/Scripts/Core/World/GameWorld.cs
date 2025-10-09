@@ -31,6 +31,12 @@ namespace SampleOS.Core.World
       }
     }
 
+    // Get all cities
+    public List<City> GetAllCities()
+    {
+      return new List<City>(cities.Values);
+    }
+
     public void RegisterNetwork(VirtualNetwork network)
     {
       networks[network.NetworkId] = network;

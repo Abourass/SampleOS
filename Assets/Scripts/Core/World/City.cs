@@ -1,14 +1,14 @@
 using System.Collections.Generic;
-using Core.Networking.Connections;
-using Core.Networking.Discovery;
+using System.Linq;
 using SampleOS.Core.Networking;
-using SampleOS.Core.Networking.Cities;
+using SampleOS.Core.Networking.Discovery;
 using UnityEngine;
 
 namespace SampleOS.Core.World
 {
   /// <summary>
-  /// Represents a city in the game world with networks and locations
+  /// Represents a city in the game world with networks and locations.
+  /// Pure data container - connection/discovery logic handled by services.
   /// </summary>
   public class City
   {
@@ -22,13 +22,10 @@ namespace SampleOS.Core.World
     // Physical locations players can visit
     private Dictionary<string, PhysicalLocation> locations;
 
-    // Discovery system for finding networks/devices
-    public NetworkDiscoveryManager DiscoveryManager { get; private set; }
+    // Discovery clues found in this city
+    private List<DiscoveryClue> clues;
 
-    // Connection manager for VPN connections
-    private ConnectionManager connectionManager;
-
-    // Currently active network (for backwards compatibility)
+    // Currently active network (what player is connected to)
     private string currentNetworkId;
 
     public City(string id, string name)
@@ -37,170 +34,237 @@ namespace SampleOS.Core.World
       CityName = name;
       networks = new Dictionary<string, VirtualNetwork>();
       locations = new Dictionary<string, PhysicalLocation>();
-      DiscoveryManager = new NetworkDiscoveryManager();
-      connectionManager = new ConnectionManager();
+      clues = new List<DiscoveryClue>();
     }
+
+    #region Network Management
 
     /// <summary>
-    /// Attempts to connect to a network via VPN
+    /// Add a network to this city
     /// </summary>
-    public Result<VirtualNetwork> ConnectToNetwork(string networkId, NetworkCredentials credentials)
-    {
-      var network = GetNetwork(networkId);
-      if (network == null)
-        return Result<VirtualNetwork>.Failure($"Network {networkId} not found");
-
-      // Validate VPN credentials
-      if (credentials?.VPNCredentials == null)
-        return Result<VirtualNetwork>.Failure("Invalid VPN credentials");
-
-      // Verify the credentials work
-      var vpnCred = credentials.VPNCredentials;
-      if (string.IsNullOrEmpty(vpnCred.Username) || string.IsNullOrEmpty(vpnCred.Password))
-        return Result<VirtualNetwork>.Failure("Invalid VPN credentials");
-
-      // Use ConnectionManager's Connect method instead of manually creating connections
-      var connectResult = connectionManager.EstablishConnection(
-        currentNetworkId ?? "public", // Source network
-        networkId,                     // Target network
-        ConnectionType.VPN,            // Connection type
-        credentials,                   // VPN credentials
-        new Dictionary<string, object> // Optional parameters
-        {
-          { "VPNServer", vpnCred.ServerAddress },
-          { "VPNProtocol", vpnCred.Protocol },
-          { "Port", vpnCred.Port }
-        }
-      );
-
-      if (connectResult.IsFailure)
-        return Result<VirtualNetwork>.Failure(connectResult.ErrorMessage);
-
-      // Switch to the new network
-      SetCurrentNetwork(networkId);
-
-      return Result<VirtualNetwork>.Success(network);
-    }
-
-    // Network management
     public void AddNetwork(VirtualNetwork network)
     {
       networks[network.NetworkId] = network;
 
       // Set as current if it's the first one
       if (string.IsNullOrEmpty(currentNetworkId))
+      {
         currentNetworkId = network.NetworkId;
+      }
     }
 
+    /// <summary>
+    /// Get a specific network by ID
+    /// </summary>
     public VirtualNetwork GetNetwork(string networkId)
     {
       networks.TryGetValue(networkId, out var network);
       return network;
     }
 
+    /// <summary>
+    /// Get all networks in this city
+    /// </summary>
     public List<VirtualNetwork> GetAllNetworks()
     {
       return new List<VirtualNetwork>(networks.Values);
     }
 
     /// <summary>
-    /// Gets list of discovered network IDs
+    /// Get the currently active network
     /// </summary>
-    public List<string> GetDiscoveredNetworks()
-    {
-      return DiscoveryManager.GetDiscoveredNetworkIds();
-    }
-
     public VirtualNetwork CurrentNetwork => GetNetwork(currentNetworkId);
 
+    /// <summary>
+    /// Set which network is currently active (for UI/context)
+    /// Note: Actual connections are managed by NetworkService
+    /// </summary>
     public void SetCurrentNetwork(string networkId)
     {
       if (networks.ContainsKey(networkId))
+      {
         currentNetworkId = networkId;
+      }
     }
 
-    // Location management
+    /// <summary>
+    /// Check if a network exists in this city
+    /// </summary>
+    public bool HasNetwork(string networkId)
+    {
+      return networks.ContainsKey(networkId);
+    }
+
+    #endregion
+
+    #region Location Management
+
+    /// <summary>
+    /// Add a physical location to this city
+    /// </summary>
     public void AddLocation(PhysicalLocation location)
     {
       locations[location.LocationId] = location;
     }
 
+    /// <summary>
+    /// Get a specific location by ID
+    /// </summary>
     public PhysicalLocation GetLocation(string locationId)
     {
       locations.TryGetValue(locationId, out var loc);
       return loc;
     }
 
+    /// <summary>
+    /// Get all locations in this city
+    /// </summary>
     public List<PhysicalLocation> GetAllLocations()
     {
       return new List<PhysicalLocation>(locations.Values);
     }
 
-    // Discovery
-    public void RegisterDiscoveryClue(DiscoveryClue clue)
-    {
-      DiscoveryManager.AddClue(clue);
-    }
-
-    public List<DiscoveryClue> GetAvailableClues()
-    {
-      return DiscoveryManager.GetAllClues();
-    }
-
     /// <summary>
-    /// Gets the connection manager for this city
+    /// Find locations by type
     /// </summary>
-    public ConnectionManager GetConnectionManager()
+    public List<PhysicalLocation> GetLocationsByType(PhysicalLocation.LocationType type)
     {
-      return connectionManager;
+      return locations.Values
+          .Where(l => l.Type == type)
+          .ToList();
+    }
+
+    #endregion
+
+    #region Discovery Clue Management
+
+    /// <summary>
+    /// Register a discovery clue found in this city
+    /// </summary>
+    public void AddDiscoveryClue(DiscoveryClue clue)
+    {
+      // Avoid duplicates
+      var existing = clues.FirstOrDefault(c =>
+          c.NetworkId == clue.NetworkId &&
+          c.Type == clue.Type &&
+          c.FilePath == clue.FilePath &&
+          c.SourceDeviceId == clue.SourceDeviceId);
+
+      if (existing == null)
+      {
+        clues.Add(clue);
+      }
     }
 
     /// <summary>
-    /// Gets network metadata information
+    /// Get all discovery clues in this city
+    /// </summary>
+    public List<DiscoveryClue> GetAllClues()
+    {
+      return new List<DiscoveryClue>(clues);
+    }
+
+    /// <summary>
+    /// Get clues for a specific network
+    /// </summary>
+    public List<DiscoveryClue> GetCluesForNetwork(string networkId)
+    {
+      return clues.Where(c => c.NetworkId == networkId).ToList();
+    }
+
+    /// <summary>
+    /// Get clues available at a specific location
+    /// Used when player visits a location
+    /// </summary>
+    public List<DiscoveryClue> GetCluesAtLocation(string locationId)
+    {
+      return clues.Where(c => c.LocationId == locationId).ToList();
+    }
+
+    /// <summary>
+    /// Get clues that could be found in files on a specific device
+    /// Used when player scans/searches a compromised device
+    /// </summary>
+    public List<DiscoveryClue> GetCluesOnDevice(string deviceId)
+    {
+      return clues.Where(c => c.SourceDeviceId == deviceId).ToList();
+    }
+
+    #endregion
+
+    #region Query Methods
+
+    /// <summary>
+    /// Get network metadata information
     /// </summary>
     public Result<NetworkMetadata> GetNetworkInfo(string networkId)
     {
       var network = GetNetwork(networkId);
       if (network == null)
+      {
         return Result<NetworkMetadata>.Failure($"Network {networkId} not found");
+      }
 
       return Result<NetworkMetadata>.Success(network.Metadata);
     }
 
     /// <summary>
-    /// Gets clues available at a specific location
-    /// Used when player visits a location
+    /// Get statistics about this city
     /// </summary>
-    public List<DiscoveryClue> GetCluesAtLocation(string locationId)
+    public CityStatistics GetStatistics()
     {
-      var allClues = DiscoveryManager.GetAllClues();
-      var result = new List<DiscoveryClue>();
-
-      foreach (var clue in allClues)
+      return new CityStatistics
       {
-        if (clue.LocationId == locationId)
-          result.Add(clue);
-      }
-
-      return result;
+        TotalNetworks = networks.Count,
+        TotalLocations = locations.Count,
+        TotalDevices = networks.Values.Sum(n => n.GetAllDevices().Count),
+        TotalClues = clues.Count
+      };
     }
 
-    /// <summary>
-    /// Gets clues that could be found in files on a specific device
-    /// Used when player scans/searches a compromised device
-    /// </summary>
-    public List<DiscoveryClue> GetCluesOnDevice(string deviceId)
+    #endregion
+
+    #region Save/Load
+
+    public CitySaveData GetSaveData()
     {
-      var allClues = DiscoveryManager.GetAllClues();
-      var result = new List<DiscoveryClue>();
-
-      foreach (var clue in allClues)
+      return new CitySaveData
       {
-        if (clue.SourceDeviceId == deviceId)
-          result.Add(clue);
-      }
-
-      return result;
+        cityId = CityId,
+        currentNetworkId = currentNetworkId,
+        discoveredClues = clues.ToList()
+      };
     }
+
+    public void LoadFromSave(CitySaveData data)
+    {
+      if (data == null) return;
+
+      currentNetworkId = data.currentNetworkId;
+      clues = data.discoveredClues ?? new List<DiscoveryClue>();
+
+      Debug.Log($"City {CityName} loaded from save");
+    }
+
+    #endregion
+  }
+
+  /// <summary>
+  /// City statistics for display
+  /// </summary>
+  public class CityStatistics
+  {
+    public int TotalNetworks;
+    public int TotalLocations;
+    public int TotalDevices;
+    public int TotalClues;
+  }
+
+  [System.Serializable]
+  public class CitySaveData
+  {
+    public string cityId;
+    public string currentNetworkId;
+    public List<DiscoveryClue> discoveredClues;
   }
 }

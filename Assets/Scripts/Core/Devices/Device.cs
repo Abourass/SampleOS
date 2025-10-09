@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using SampleOS.Core.FileSystem;
 using SampleOS.Core.SoftwarePackages;
 using SampleOS.Core.Apps;
-using Core.Networking.Discovery;
+using SampleOS.Core.Networking.Discovery;
 using SampleOS.Core.Networking;
 
 namespace SampleOS.Core.Devices
@@ -39,6 +39,10 @@ namespace SampleOS.Core.Devices
 
     // Security
     public SecurityLevel SecurityLevel { get; set; }
+    /// <summary>
+    /// Whether this device has been compromised by the player
+    /// </summary>
+    public bool IsCompromised { get; set; }
 
     // Story/Metadata
     public Dictionary<string, object> Metadata { get; protected set; }

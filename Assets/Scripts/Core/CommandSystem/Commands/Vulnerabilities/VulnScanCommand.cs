@@ -1,55 +1,48 @@
 using System;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using SampleOS.Core.SoftwarePackages;
 using SampleOS.Core.Devices;
+using SampleOS.Core.Services;
 using UnityEngine;
-using System.Collections.Generic;
 
 namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
 {
   /// <summary>
   /// Scans a device for vulnerabilities in its installed software
   /// </summary>
-  public class VulnScanCommand : IAsyncCommand
+  public class VulnScanCommand : CommandBase, IAsyncCommand
   {
-    public string Name => "vulnscan";
-    public string Description => "Scan a device for software vulnerabilities";
-    public string Usage => "vulnscan [target] - Scan current or specified device for vulnerabilities";
-
-    private readonly PlayerVulnerabilityInventory vulnerabilityInventory;
-    private readonly VulnerabilityDatabase vulnerabilityDatabase;
+    public override string Name => "vulnscan";
+    public override string Description => "Scan a device for software vulnerabilities";
+    public override string Usage => "vulnscan [target] - Scan current or specified device for vulnerabilities";
     public bool SupportsCancellation => true;
 
-    public VulnScanCommand(PlayerVulnerabilityInventory inventory)
+    public override CommandResult Execute(string[] args, CommandContext context)
     {
-      vulnerabilityInventory = inventory;
-      vulnerabilityDatabase = new VulnerabilityDatabase();
-    }
-
-    public CommandResult Execute(string[] args, CommandContext context)
-    {
-      // This command must be async
-      return CommandResult.Error("This command requires async execution. Use 'await' or run it properly.");
+      return CommandResult.Error("This command requires async execution");
     }
 
     public async Task<CommandResult> ExecuteAsync(string[] args, CommandContext context)
     {
       try
       {
-        // Determine target device
-        Device targetDevice = context.CurrentDevice;
-        string targetIdentifier = targetDevice.Hostname;
+        // Get current device from HackingSession service via context
+        var targetDevice = context.CurrentDevice;
+        if (targetDevice == null)
+        {
+          WriteError(context, "No device context available");
+          return CommandResult.Error("No device");
+        }
 
         if (args.Length > 0)
         {
-          // TODO: Allow scanning remote devices if we have access
-          context.Stderr.WriteLine("Remote scanning not yet implemented. Scanning current device.");
+          WriteError(context, "Remote scanning not yet implemented. Scanning current device.");
         }
 
-        context.Stdout.WriteLine($"Scanning {targetDevice.Hostname} ({targetDevice.IPAddress}) for vulnerabilities...");
-        context.Stdout.WriteLine("");
+        WriteOutput(context, $"Scanning {targetDevice.Hostname} ({targetDevice.IPAddress}) for vulnerabilities...");
+        WriteOutput(context, "");
 
         // Simulate scan delay
         await Task.Delay(1500, context.CancellationToken);
@@ -57,13 +50,21 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
         // Check if device has any software
         if (targetDevice.InstalledSoftware == null || targetDevice.InstalledSoftware.Count == 0)
         {
-          context.Stdout.WriteLine("No software detected on this device.");
+          WriteOutput(context, "No software detected on this device.");
           return CommandResult.Ok();
         }
 
-        context.Stdout.WriteLine($"Analyzing {targetDevice.InstalledSoftware.Count} installed software packages...");
+        WriteOutput(context, $"Analyzing {targetDevice.InstalledSoftware.Count} installed software packages...");
         await Task.Delay(800, context.CancellationToken);
-        context.Stdout.WriteLine("");
+        WriteOutput(context, "");
+
+        // Get vulnerability database service
+        var vulnDb = ServiceLocator.Instance.Get<IVulnerabilityDatabaseService>();
+        if (vulnDb == null)
+        {
+          WriteError(context, "Vulnerability database not available");
+          return CommandResult.Error("Service unavailable");
+        }
 
         // Scan each software package for vulnerabilities
         var foundVulnerabilities = new List<(Software software, Vulnerability vuln, int port)>();
@@ -74,31 +75,35 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
         {
           totalSoftware++;
 
-          // Check if software has known vulnerabilities
-          if (software.Vulnerabilities != null && software.Vulnerabilities.Count > 0)
+          // Find vulnerabilities that affect this software version
+          var vulns = vulnDb.GetVulnerabilitiesForSoftware(software);
+
+          if (vulns.Count > 0)
           {
             vulnerableSoftware++;
 
-            foreach (var vuln in software.Vulnerabilities)
+            foreach (var vuln in vulns)
             {
               // Determine port (use first listening port or 0)
               int port = software.ListeningPorts?.FirstOrDefault() ?? 0;
 
               foundVulnerabilities.Add((software, vuln, port));
 
-              // Add to player's vulnerability inventory
-              vulnerabilityInventory.AddVulnerability(
-                  vuln,
+              // Add to player's progress via PlayerStateService
+              context.PlayerState.Progress.AddDiscoveredVulnerability(
                   targetDevice.Hostname,
-                  port,
-                  software.Name
+                  software.Name,
+                  vuln,
+                  port
               );
             }
           }
 
-          // Simulate progressive scanning
+          // Simulate progressive scanning with progress reporting
           if (totalSoftware % 3 == 0)
           {
+            float progress = (float)totalSoftware / targetDevice.InstalledSoftware.Count;
+            ReportProgress(context, progress, $"Scanned {totalSoftware}/{targetDevice.InstalledSoftware.Count} packages");
             await Task.Delay(200, context.CancellationToken);
           }
         }
@@ -106,25 +111,27 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
         // Display results
         DisplayScanResults(context, targetDevice, foundVulnerabilities, totalSoftware, vulnerableSoftware);
 
-        // Save to file on current device
+        // Save to file on current device using context.FileSystem
         if (foundVulnerabilities.Count > 0)
         {
-          vulnerabilityInventory.SaveToLocalFile(context.CurrentDevice.FileSystem);
-          context.Stdout.WriteLine("");
-          context.Stdout.WriteLine($"Results saved to ~/vulnerabilities.txt");
+          var report = context.PlayerState.GenerateVulnerabilityReport();
+          context.FileSystem.CreateFile("/home/user/vulnerabilities.txt", report);
+
+          WriteOutput(context, "");
+          WriteOutput(context, "Results saved to ~/vulnerabilities.txt");
         }
 
         return CommandResult.Ok();
       }
       catch (OperationCanceledException)
       {
-        context.Stdout.WriteLine("");
-        context.Stdout.WriteLine("Scan cancelled.");
+        WriteOutput(context, "");
+        WriteOutput(context, "Scan cancelled.");
         return CommandResult.Error("Cancelled");
       }
       catch (Exception ex)
       {
-        context.Stderr.WriteLine($"Scan failed: {ex.Message}");
+        WriteError(context, $"Scan failed: {ex.Message}");
         return CommandResult.FromException(ex);
       }
     }
@@ -136,26 +143,30 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
         int totalSoftware,
         int vulnerableSoftware)
     {
-      context.Stdout.WriteLine("═══════════════════════════════════════════════════════════════");
-      context.Stdout.WriteLine($"VULNERABILITY SCAN REPORT: {device.Hostname}");
-      context.Stdout.WriteLine("═══════════════════════════════════════════════════════════════");
-      context.Stdout.WriteLine("");
+      context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f));
+      WriteOutput(context, "═══════════════════════════════════════════════════════════════");
+      WriteOutput(context, $"VULNERABILITY SCAN REPORT: {device.Hostname}");
+      WriteOutput(context, "═══════════════════════════════════════════════════════════════");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, "");
 
       // Summary
-      context.Stdout.WriteLine("SUMMARY");
-      context.Stdout.WriteLine("-------");
-      context.Stdout.WriteLine($"Target:              {device.Hostname} ({device.IPAddress})");
-      context.Stdout.WriteLine($"Device Type:         {device.DeviceType.Name}");
-      context.Stdout.WriteLine($"Security Level:      {device.SecurityLevel}");
-      context.Stdout.WriteLine($"Software Scanned:    {totalSoftware}");
-      context.Stdout.WriteLine($"Vulnerable Packages: {vulnerableSoftware}");
-      context.Stdout.WriteLine($"Total Vulnerabilities: {vulnerabilities.Count}");
-      context.Stdout.WriteLine("");
+      WriteOutput(context, "SUMMARY");
+      WriteOutput(context, "-------");
+      WriteOutput(context, $"Target:              {device.Hostname} ({device.IPAddress})");
+      WriteOutput(context, $"Device Type:         {device.DeviceType.Name}");
+      WriteOutput(context, $"Security Level:      {device.SecurityLevel}");
+      WriteOutput(context, $"Software Scanned:    {totalSoftware}");
+      WriteOutput(context, $"Vulnerable Packages: {vulnerableSoftware}");
+      WriteOutput(context, $"Total Vulnerabilities: {vulnerabilities.Count}");
+      WriteOutput(context, "");
 
       if (vulnerabilities.Count == 0)
       {
-        context.Stdout.WriteLine("✓ No vulnerabilities detected.");
-        context.Stdout.WriteLine("  This device appears to be secure.");
+        context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
+        WriteOutput(context, "✓ No vulnerabilities detected.");
+        context.Stdout.SetColor(Color.white);
+        WriteOutput(context, "  This device appears to be secure.");
         return;
       }
 
@@ -165,18 +176,37 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
       var medium = vulnerabilities.Count(v => v.vuln.Severity >= 4 && v.vuln.Severity < 7);
       var low = vulnerabilities.Count(v => v.vuln.Severity < 4);
 
-      context.Stdout.WriteLine("SEVERITY BREAKDOWN");
-      context.Stdout.WriteLine("------------------");
-      if (critical > 0) context.Stdout.WriteLine($"🔴 Critical: {critical}");
-      if (high > 0) context.Stdout.WriteLine($"🟠 High:     {high}");
-      if (medium > 0) context.Stdout.WriteLine($"🟡 Medium:   {medium}");
-      if (low > 0) context.Stdout.WriteLine($"🟢 Low:      {low}");
-      context.Stdout.WriteLine("");
+      WriteOutput(context, "SEVERITY BREAKDOWN");
+      WriteOutput(context, "------------------");
+
+      if (critical > 0)
+      {
+        context.Stdout.SetColor(new Color(1f, 0.2f, 0.2f));
+        WriteOutput(context, $"🔴 Critical: {critical}");
+      }
+      if (high > 0)
+      {
+        context.Stdout.SetColor(new Color(1f, 0.5f, 0.2f));
+        WriteOutput(context, $"🟠 High:     {high}");
+      }
+      if (medium > 0)
+      {
+        context.Stdout.SetColor(new Color(1f, 0.9f, 0.3f));
+        WriteOutput(context, $"🟡 Medium:   {medium}");
+      }
+      if (low > 0)
+      {
+        context.Stdout.SetColor(new Color(0.7f, 0.7f, 0.7f));
+        WriteOutput(context, $"🟢 Low:      {low}");
+      }
+
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, "");
 
       // Detailed vulnerability list
-      context.Stdout.WriteLine("VULNERABILITIES DETECTED");
-      context.Stdout.WriteLine("------------------------");
-      context.Stdout.WriteLine("");
+      WriteOutput(context, "VULNERABILITIES DETECTED");
+      WriteOutput(context, "------------------------");
+      WriteOutput(context, "");
 
       // Group by software
       var groupedBySoftware = vulnerabilities
@@ -188,56 +218,70 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
         var software = softwareGroup.Key;
         var vulns = softwareGroup.ToList();
 
-        context.Stdout.WriteLine($"📦 {software.Name} v{software.Version}");
+        context.Stdout.SetColor(new Color(0.8f, 0.8f, 1f));
+        WriteOutput(context, $"📦 {software.Name} v{software.Version}");
+        context.Stdout.SetColor(Color.white);
 
         if (software.ListeningPorts != null && software.ListeningPorts.Count > 0)
         {
-          context.Stdout.WriteLine($"   Ports: {string.Join(", ", software.ListeningPorts)}");
+          WriteOutput(context, $"   Ports: {string.Join(", ", software.ListeningPorts)}");
         }
 
-        context.Stdout.WriteLine("");
+        WriteOutput(context, "");
 
         foreach (var (_, vuln, port) in vulns)
         {
           string severityIcon = GetSeverityIcon(vuln.Severity);
-          string severityColor = GetSeverityColor(vuln.Severity);
+          Color severityColor = GetSeverityColorValue(vuln.Severity);
 
-          context.Stdout.WriteLine($"   {severityIcon} {vuln.CVE} - {vuln.Name}");
-          context.Stdout.WriteLine($"      Severity: {vuln.Severity}/10 ({severityColor})");
-          context.Stdout.WriteLine($"      Type: {vuln.Type}");
+          context.Stdout.SetColor(severityColor);
+          WriteOutput(context, $"   {severityIcon} {vuln.CVE} - {vuln.Name}");
+          context.Stdout.SetColor(Color.white);
+
+          WriteOutput(context, $"      Severity: {vuln.Severity}/10 ({GetSeverityLabel(vuln.Severity)})");
+          WriteOutput(context, $"      Type: {vuln.Type}");
 
           if (port > 0)
           {
-            context.Stdout.WriteLine($"      Port: {port}");
+            WriteOutput(context, $"      Port: {port}");
           }
 
-          context.Stdout.WriteLine($"      Description: {vuln.Description}");
+          WriteOutput(context, $"      Description: {vuln.Description}");
 
           if (!string.IsNullOrEmpty(vuln.ExploitCommand))
           {
-            context.Stdout.WriteLine($"      💡 Exploit: {vuln.ExploitCommand}");
+            context.Stdout.SetColor(new Color(1f, 1f, 0.3f));
+            WriteOutput(context, $"      💡 Exploit: {vuln.ExploitCommand}");
+            context.Stdout.SetColor(Color.white);
           }
 
-          context.Stdout.WriteLine("");
+          WriteOutput(context, "");
         }
       }
 
       // Recommendations
-      context.Stdout.WriteLine("RECOMMENDATIONS");
-      context.Stdout.WriteLine("---------------");
+      context.Stdout.SetColor(new Color(0.3f, 0.8f, 1f));
+      WriteOutput(context, "RECOMMENDATIONS");
+      WriteOutput(context, "---------------");
+      context.Stdout.SetColor(Color.white);
 
       if (critical > 0)
       {
-        context.Stdout.WriteLine("⚠️  CRITICAL vulnerabilities detected!");
-        context.Stdout.WriteLine("    This device is highly vulnerable to exploitation.");
-        context.Stdout.WriteLine("");
+        context.Stdout.SetColor(new Color(1f, 0.3f, 0.3f));
+        WriteOutput(context, "⚠️  CRITICAL vulnerabilities detected!");
+        context.Stdout.SetColor(Color.white);
+        WriteOutput(context, "    This device is highly vulnerable to exploitation.");
+        WriteOutput(context, "");
       }
 
-      context.Stdout.WriteLine("• Use 'vulns' to view your discovered vulnerabilities");
-      context.Stdout.WriteLine("• Use 'exploit <target> <cve>' to attempt exploitation");
-      context.Stdout.WriteLine("• Vulnerabilities saved to ~/vulnerabilities.txt");
-      context.Stdout.WriteLine("");
-      context.Stdout.WriteLine("═══════════════════════════════════════════════════════════════");
+      WriteOutput(context, "• Use 'vulns' to view your discovered vulnerabilities");
+      WriteOutput(context, "• Use 'exploit <cve> <host> <port>' to attempt exploitation");
+      WriteOutput(context, "• Vulnerabilities saved to ~/vulnerabilities.txt");
+      WriteOutput(context, "");
+
+      context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f));
+      WriteOutput(context, "═══════════════════════════════════════════════════════════════");
+      context.Stdout.SetColor(Color.white);
     }
 
     private string GetSeverityIcon(int severity)
@@ -248,12 +292,20 @@ namespace SampleOS.Core.CommandSystem.Commands.Vulnerabilities
       return "🟢";
     }
 
-    private string GetSeverityColor(int severity)
+    private string GetSeverityLabel(int severity)
     {
       if (severity >= 9) return "CRITICAL";
       if (severity >= 7) return "HIGH";
       if (severity >= 4) return "MEDIUM";
       return "LOW";
+    }
+
+    private Color GetSeverityColorValue(int severity)
+    {
+      if (severity >= 9) return new Color(1f, 0.2f, 0.2f);
+      if (severity >= 7) return new Color(1f, 0.5f, 0.2f);
+      if (severity >= 4) return new Color(1f, 0.9f, 0.3f);
+      return new Color(0.7f, 0.7f, 0.7f);
     }
   }
 }

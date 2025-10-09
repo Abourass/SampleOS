@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SampleOS.Core.Networking;
 
-namespace Core.Networking.Access
+namespace SampleOS.Core.Networking.Access
 {
   [Serializable]
   public class NetworkSecurityProfile

@@ -1,39 +1,30 @@
-using Core.Networking.Discovery;
 using UnityEngine;
-using System.Threading;
-using SampleOS.Core.World;
-using SampleOS.Core.Session;
-using Core.Networking.Connections;
+using System.Threading.Tasks;
+using System.Linq;
+using SampleOS.Core.Services;
+using SampleOS.Core.Networking.Discovery;
+using SampleOS.Core.Networking.Connections;
+using SampleOS.Core.Networking.Access;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
-  public class VpnConnectCommand : CommandBase
+  public class VpnConnectCommand : CommandBase, IAsyncCommand
   {
-    private City city;
-    private PlayerCredentialManager credentialManager;
-    private CommandProcessor processor;
-    private PlayerSession session;
-    private GameWorld gameWorld;
-
     public override string Name => "vpn-connect";
     public override string Description => "Connect to a network via VPN";
     public override string Usage => "vpn-connect <network-id> [--config <config-file>]";
+    public bool SupportsCancellation => true;
 
-    public VpnConnectCommand(
-      City city,
-      PlayerCredentialManager credentialManager,
-      CommandProcessor processor,
-      PlayerSession session,
-      GameWorld gameWorld)
+    public VpnConnectCommand()
     {
-      this.city = city;
-      this.credentialManager = credentialManager;
-      this.processor = processor;
-      this.session = session;
-      this.gameWorld = gameWorld;
     }
 
     public override CommandResult Execute(string[] args, CommandContext context)
+    {
+      return CommandResult.Error("This command requires async execution.");
+    }
+
+    public async Task<CommandResult> ExecuteAsync(string[] args, CommandContext context)
     {
       if (args.Length < 1)
       {
@@ -42,43 +33,41 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       }
 
       string networkId = args[0];
-      string configFile = null;
-
-      // Parse config file option
-      for (int i = 1; i < args.Length; i++)
-      {
-        if (args[i] == "--config" && i + 1 < args.Length)
-        {
-          configFile = args[i + 1];
-          break;
-        }
-      }
 
       WriteOutput(context, $"Attempting VPN connection to network '{networkId}'...");
       WriteOutput(context, "");
 
-      // Check if network is discovered
-      if (!city.DiscoveryManager.IsNetworkDiscovered(networkId))
+      // Get services via context
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null)
+      {
+        WriteError(context, "Error: No city context available");
+        return CommandResult.Error("No city context");
+      }
+
+      // Check if network is discovered (via PlayerStateService)
+      if (!context.PlayerState.IsNetworkDiscovered(networkId))
       {
         WriteError(context, $"Network '{networkId}' has not been discovered yet.");
         WriteOutput(context, "");
         WriteOutput(context, "Hints:");
-        WriteOutput(context, "  - Use 'networks --discovered' to see available networks");
         WriteOutput(context, "  - Compromise systems to find clues about new networks");
         WriteOutput(context, "  - Scan files for VPN configurations and network references");
+        WriteOutput(context, "  - Use 'scan-creds' on compromised systems");
         return CommandResult.Error("Network not discovered");
       }
 
       // Get the network
-      var network = city.GetNetwork(networkId);
+      var network = currentCity.GetNetwork(networkId);
       if (network == null)
       {
         WriteError(context, $"Network '{networkId}' not found in this city.");
         return CommandResult.Error("Network not found");
       }
 
-      // Get VPN credentials
-      var vpnCredentials = credentialManager.GetCredentialsForNetwork(networkId);
+      // Get VPN credentials from PlayerCredentials
+      var vpnCredentials = context.PlayerState.Credentials.GetVPNCredentials(networkId);
+
       if (vpnCredentials == null)
       {
         WriteError(context, "Error: No VPN credentials found for this network.");
@@ -88,19 +77,11 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         WriteOutput(context, "  - Look in /etc/openvpn/ or user home directories");
         WriteOutput(context, "  - Check email folders for VPN setup instructions");
         WriteOutput(context, "  - Use 'scan-creds' on compromised systems");
-        WriteOutput(context, "");
-        WriteOutput(context, "Once you have credentials, they'll be stored automatically.");
         return CommandResult.Error("No VPN credentials found");
       }
 
-      // Create network credentials object
-      var networkCredentials = new NetworkCredentials(networkId)
-      {
-        VPNCredentials = vpnCredentials
-      };
-
       // Display connection UI
-      context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f)); // Light blue
+      context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f));
       WriteOutput(context, "═══════════════════════════════════════════════════════════");
       WriteOutput(context, "                  VPN CONNECTION                            ");
       WriteOutput(context, "═══════════════════════════════════════════════════════════");
@@ -109,49 +90,68 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
       WriteOutput(context, $"Network:  {network.Metadata.Name}");
       WriteOutput(context, $"Org:      {network.Metadata.Organization}");
-      WriteOutput(context, $"Server:   {vpnCredentials.ServerAddress}");
+      WriteOutput(context, $"Server:   {vpnCredentials.Server}");
       WriteOutput(context, $"Protocol: {vpnCredentials.Protocol}");
       WriteOutput(context, $"Username: {vpnCredentials.Username}");
       WriteOutput(context, "");
 
       // Simulate connection stages
-      WriteOutput(context, $"[1/5] Resolving VPN server {vpnCredentials.ServerAddress}...");
-      Thread.Sleep(300);
+      ReportProgress(context, 0.2f, "Resolving VPN server");
+      WriteOutput(context, $"[1/5] Resolving VPN server {vpnCredentials.Server}...");
+      await Task.Delay(300, context.CancellationToken);
 
+      ReportProgress(context, 0.4f, "Establishing encrypted tunnel");
       WriteOutput(context, "[2/5] Establishing encrypted tunnel...");
-      Thread.Sleep(400);
+      await Task.Delay(400, context.CancellationToken);
 
+      ReportProgress(context, 0.6f, "Authenticating");
       WriteOutput(context, $"[3/5] Authenticating with username '{vpnCredentials.Username}'...");
-      Thread.Sleep(500);
+      await Task.Delay(500, context.CancellationToken);
 
+      ReportProgress(context, 0.8f, "Negotiating parameters");
       WriteOutput(context, "[4/5] Negotiating connection parameters...");
-      Thread.Sleep(300);
+      await Task.Delay(300, context.CancellationToken);
 
+      ReportProgress(context, 0.9f, "Configuring routing");
       WriteOutput(context, "[5/5] Configuring routing tables...");
-      Thread.Sleep(400);
+      await Task.Delay(400, context.CancellationToken);
 
       // Get current network (source)
-      string currentNetworkId = city.CurrentNetwork?.NetworkId ?? "public";
+      string currentNetworkId = currentCity.CurrentNetwork?.NetworkId ?? "public";
 
-      // Use ConnectionManager to establish VPN connection
-      var connectionManager = city.GetConnectionManager();
-      var connectionResult = connectionManager.EstablishConnection(
-        currentNetworkId,
-        networkId,
-        ConnectionType.VPN,
-        networkCredentials,
-        new System.Collections.Generic.Dictionary<string, object>
+      // Create network credentials
+      var networkCredentials = new NetworkCredentials(networkId)
+      {
+        VPNCredentials = new VPNCredential
         {
-          { "VPNServer", vpnCredentials.ServerAddress },
-          { "VPNProtocol", vpnCredentials.Protocol },
-          { "Port", vpnCredentials.Port }
+          NetworkId = vpnCredentials.NetworkId,
+          NetworkName = network.Metadata.Name,
+          Username = vpnCredentials.Username,
+          Password = vpnCredentials.Password,
+          ServerAddress = vpnCredentials.Server,
+          Port = vpnCredentials.Port,
+          Protocol = vpnCredentials.Protocol
         }
+      };
+
+      // Use NetworkService to establish VPN connection
+      var connectionResult = context.NetworkService.EstablishConnection(
+          currentNetworkId,
+          networkId,
+          ConnectionType.VPN,
+          new System.Collections.Generic.Dictionary<string, object>
+          {
+                    { "VPNServer", vpnCredentials.Server },
+                    { "VPNProtocol", vpnCredentials.Protocol },
+                    { "Port", vpnCredentials.Port },
+                    { "Credentials", networkCredentials }
+          }
       );
 
       if (connectionResult.IsFailure)
       {
         WriteOutput(context, "");
-        context.Stdout.SetColor(new Color(1f, 0.3f, 0.3f)); // Red
+        context.Stdout.SetColor(new Color(1f, 0.3f, 0.3f));
         WriteOutput(context, "✗ VPN connection failed");
         context.Stdout.SetColor(Color.white);
         WriteOutput(context, "");
@@ -160,12 +160,16 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       }
 
       // Switch to the new network
-      city.SetCurrentNetwork(networkId);
+      currentCity.SetCurrentNetwork(networkId);
+
+      // Trigger network change event
+      GameEvents.Instance.Trigger(GameEventType.NetworkChanged, networkId);
 
       // Connection successful
       var connection = connectionResult.Data;
       WriteOutput(context, "");
-      context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+      ReportProgress(context, 1.0f, "Connected!");
+      context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
       WriteOutput(context, "✓ VPN connection established!");
       context.Stdout.SetColor(Color.white);
       WriteOutput(context, "");
@@ -185,15 +189,15 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       WriteOutput(context, $"  Encryption: {connection.EncryptionType}");
       WriteOutput(context, "");
 
-      // Show security profile information
+      // Show security profile
       if (network.SecurityProfile != null)
       {
         var securityLevel = network.SecurityProfile.DefaultSecurityLevel;
-        Color secColor = securityLevel == SampleOS.Core.Networking.SecurityLevel.High ?
-          new Color(1f, 0.3f, 0.3f) :
-          securityLevel == SampleOS.Core.Networking.SecurityLevel.Medium ?
-          new Color(1f, 0.7f, 0.2f) :
-          new Color(0.3f, 1f, 0.3f);
+        Color secColor = securityLevel == SampleOS.Core.Networking.SecurityLevel.High
+            ? new Color(1f, 0.3f, 0.3f)
+            : securityLevel == SampleOS.Core.Networking.SecurityLevel.Medium
+            ? new Color(1f, 0.7f, 0.2f)
+            : new Color(0.3f, 1f, 0.3f);
 
         context.Stdout.SetColor(secColor);
         WriteOutput(context, $"Security Level: {securityLevel}");
@@ -205,34 +209,21 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
           WriteOutput(context, "⚠ Warning: Intrusion Detection System active");
           context.Stdout.SetColor(Color.white);
         }
-
-        if (network.SecurityProfile.RequiresMultiFactor)
-        {
-          context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f));
-          WriteOutput(context, "⚠ Warning: Multi-factor authentication required for some systems");
-          context.Stdout.SetColor(Color.white);
-        }
-
-        WriteOutput(context, "");
       }
 
-      // Show next steps
+      WriteOutput(context, "");
       WriteOutput(context, "Your IP address is now in range: " + network.Metadata.IPRange);
       WriteOutput(context, "");
       WriteOutput(context, "Next steps:");
-      WriteOutput(context, "  • Use 'nmap <ip-range>' to discover systems on this network");
-      WriteOutput(context, "  • Use 'networks' to view detailed network information");
-      WriteOutput(context, "  • Use 'connections' to see active network connections");
+      WriteOutput(context, "  • Use 'nmap <ip-range>' to discover systems");
+      WriteOutput(context, "  • Use 'networks' to view network details");
+      WriteOutput(context, "  • Use 'connections' to see active connections");
 
-      // Show number of known devices on this network
-      var devicesOnNetwork = gameWorld.GetDeviceNetwork(session.CurrentDevice);
-      if (devicesOnNetwork != null)
+      // Show discovered devices count
+      var devices = context.NetworkService.GetDevicesInNetwork(networkId);
+      if (devices.Count > 0)
       {
-        var deviceCount = city.DiscoveryManager.GetNetworkDevices(networkId).Count;
-        if (deviceCount > 0)
-        {
-          WriteOutput(context, $"  • {deviceCount} device(s) already discovered on this network");
-        }
+        WriteOutput(context, $"  • {devices.Count} device(s) on this network");
       }
 
       return CommandResult.Ok();

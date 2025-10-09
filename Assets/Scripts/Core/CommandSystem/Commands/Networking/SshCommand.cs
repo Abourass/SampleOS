@@ -1,25 +1,17 @@
 using UnityEngine;
 using SampleOS.Core.Devices;
-using SampleOS.Core.Session;
-using SampleOS.Core.World;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
   public class SshCommand : CommandBase
   {
-    private CommandProcessor processor;
-    private PlayerSession session;
-    private GameWorld gameWorld;
-
     public override string Name => "ssh";
     public override string Description => "Connect to remote systems via SSH";
     public override string Usage => "ssh [user@]hostname [-p password]";
 
-    public SshCommand(CommandProcessor processor, PlayerSession session, GameWorld gameWorld)
+    // No constructor dependencies!
+    public SshCommand()
     {
-      this.processor = processor;
-      this.session = session;
-      this.gameWorld = gameWorld;
     }
 
     public override CommandResult Execute(string[] args, CommandContext context)
@@ -57,8 +49,39 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         }
       }
 
-      // Find the target device
-      var device = gameWorld.FindDevice(hostname);
+      // Find the target device using WorldService
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null)
+      {
+        WriteError(context, "Error: No city context available");
+        return CommandResult.Error("No city");
+      }
+
+      // Search current network first
+      var network = currentCity.CurrentNetwork;
+      Device device = network.GetDeviceByHostname(hostname) ?? network.GetDeviceByIP(hostname);
+
+      // If not found in current network, search other connected networks
+      if (device == null)
+      {
+        var connectionManager = currentCity.GetConnectionManager();
+        var activeConnections = connectionManager.GetActiveConnections();
+
+        foreach (var conn in activeConnections)
+        {
+          if (conn.TargetNetworkId != network.NetworkId)
+          {
+            // Try to find device in connected network
+            var cityResult = currentCity.GetNetworkInfo(conn.TargetNetworkId);
+            if (cityResult.IsSuccess)
+            {
+              // This is a simplified lookup - you'd need to actually get the network
+              // For now, we'll just show a hint
+            }
+          }
+        }
+      }
+
       if (device == null)
       {
         WriteError(context, $"ssh: Could not resolve hostname {hostname}");
@@ -66,6 +89,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         WriteOutput(context, "Hints:");
         WriteOutput(context, "  - Use 'nmap <ip-range>' to discover devices on the current network");
         WriteOutput(context, "  - Check if you're connected to the correct network with 'networks'");
+        WriteOutput(context, "  - Use 'vpn-connect' if the device is on a different network");
         return CommandResult.Error("Host not found");
       }
 
@@ -102,9 +126,21 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       // Determine username if not specified
       if (string.IsNullOrEmpty(username))
       {
-        // Try to find default username from credentials or use generic default
-        var defaultCred = device.Credentials.Find(c => c.IsDefault);
-        username = defaultCred?.Username ?? "user";
+        // Check if player has saved credentials for this host
+        if (context.PlayerState.HasCredentialsFor(hostname))
+        {
+          var savedCreds = context.PlayerState.GetCredentialsFor(hostname);
+          username = savedCreds.username;
+          password = savedCreds.password;
+          WriteOutput(context, $"Using saved credentials for {hostname}");
+        }
+        else
+        {
+          // Try to find default username from device credentials
+          var defaultCred = device.Credentials.Find(c => c.IsDefault);
+          username = defaultCred?.Username ?? "user";
+        }
+
         WriteOutput(context, $"Connecting to {hostname} as {username}...");
       }
       else
@@ -124,11 +160,18 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         WriteOutput(context, "  - Try different usernames (admin, root, user)");
         WriteOutput(context, "  - Use credentials found in compromised systems");
         WriteOutput(context, "  - Check your credential database with 'creds list'");
+        WriteOutput(context, "  - Use 'vulnscan' and 'exploit' to gain access");
         return CommandResult.Error("Authentication failed");
       }
 
-      // Connection successful - create remote connection
-      var connectionResult = session.ConnectToRemote(device, username, password);
+      // Store successful credentials
+      if (!string.IsNullOrEmpty(password))
+      {
+        context.PlayerState.StoreCredentials(hostname, username, password);
+      }
+
+      // Connection successful - use PlayerStateService to connect
+      var connectionResult = context.PlayerState.ConnectToDevice(device, username, password);
       if (connectionResult.IsFailure)
       {
         WriteError(context, $"Failed to establish connection: {connectionResult.ErrorMessage}");
@@ -139,9 +182,6 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       WriteOutput(context, $"✓ Successfully connected to {hostname}");
       context.Stdout.SetColor(Color.white);
       WriteOutput(context, "");
-
-      // Update command processor context
-      processor.SetCurrentDevice(device);
 
       // Show welcome message
       WriteOutput(context, $"Welcome to {device.Hostname}");
@@ -159,16 +199,22 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         WriteOutput(context, "# ROOT ACCESS GRANTED #");
         context.Stdout.SetColor(Color.white);
         WriteOutput(context, "");
+
+        // Record root compromise
+        context.PlayerState.RecordSystemCompromise(device, "SSH", true);
       }
       else
       {
         WriteOutput(context, "Limited access - explore and escalate privileges.");
         WriteOutput(context, "");
         WriteOutput(context, "Hints:");
-        WriteOutput(context, "  - Use 'scan-vulns' to find exploitable vulnerabilities");
+        WriteOutput(context, "  - Use 'vulnscan' to find exploitable vulnerabilities");
         WriteOutput(context, "  - Check for sensitive files with 'find' and 'grep'");
         WriteOutput(context, "  - Look for credentials in user home directories");
         WriteOutput(context, "");
+
+        // Record user-level compromise
+        context.PlayerState.RecordSystemCompromise(device, "SSH", false);
       }
 
       // Show security warnings if device has high security

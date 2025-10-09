@@ -1,21 +1,18 @@
 using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
-using SampleOS.Core.World;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
   public class NetworksCommand : CommandBase
   {
-    private City city;
-
     public override string Name => "networks";
     public override string Description => "List available networks and connection status";
     public override string Usage => "networks [--available|--connected|--discovered]";
 
-    public NetworksCommand(City city)
+    // No constructor dependencies anymore!
+    public NetworksCommand()
     {
-      this.city = city;
     }
 
     public override CommandResult Execute(string[] args, CommandContext context)
@@ -63,7 +60,15 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
     private void DisplayCurrentNetwork(CommandContext context)
     {
-      var currentNetwork = city.CurrentNetwork;
+      // Get current network from WorldService
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null)
+      {
+        WriteError(context, "Error: No city context available");
+        return;
+      }
+
+      var currentNetwork = currentCity.CurrentNetwork;
 
       context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
       WriteOutput(context, "CURRENT NETWORK:");
@@ -79,12 +84,20 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       WriteOutput(context, "");
       WriteOutput(context, $"Description:  {currentNetwork.Metadata.Description}");
       WriteOutput(context, "");
+
+      // Show device count
+      var devices = context.NetworkService.GetDevicesInNetwork(currentNetwork.NetworkId);
+      WriteOutput(context, $"Devices:      {devices.Count} total");
+      WriteOutput(context, "");
     }
 
     private void DisplayAvailableNetworks(CommandContext context)
     {
-      // Get connection manager for connection status
-      var connectionManager = city.GetConnectionManager();
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null) return;
+
+      var currentNetwork = currentCity.CurrentNetwork;
+      var connectionManager = currentCity.GetConnectionManager();
       var activeConnections = connectionManager.GetActiveConnections();
 
       context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f)); // Light blue
@@ -94,17 +107,18 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
       // Current network is always accessible
       context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
-      WriteOutput(context, $"[CONNECTED] {city.CurrentNetwork.Metadata.Name}");
+      WriteOutput(context, $"[CONNECTED] {currentNetwork.Metadata.Name}");
       context.Stdout.SetColor(Color.white);
-      WriteOutput(context, $"            {city.CurrentNetwork.Metadata.Description}");
+      WriteOutput(context, $"            {currentNetwork.Metadata.Description}");
+      WriteOutput(context, $"            Network ID: {currentNetwork.NetworkId}");
       WriteOutput(context, "");
 
       // Show other networks with active connections
       foreach (var connection in activeConnections)
       {
-        if (connection.TargetNetworkId != city.CurrentNetwork.NetworkId)
+        if (connection.TargetNetworkId != currentNetwork.NetworkId)
         {
-          var networkInfoResult = city.GetNetworkInfo(connection.TargetNetworkId);
+          var networkInfoResult = currentCity.GetNetworkInfo(connection.TargetNetworkId);
 
           context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
           WriteOutput(context, $"[AVAILABLE] {connection.TargetNetworkId}");
@@ -124,7 +138,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       }
 
       if (activeConnections.Count == 0 ||
-          activeConnections.All(c => c.TargetNetworkId == city.CurrentNetwork.NetworkId))
+          activeConnections.All(c => c.TargetNetworkId == currentNetwork.NetworkId))
       {
         WriteOutput(context, "No other networks currently connected.");
         WriteOutput(context, "");
@@ -133,8 +147,13 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
     private void DisplayDiscoveredNetworks(CommandContext context)
     {
-      // Get discovered network IDs
-      List<string> discoveredNetworkIds = city.GetDiscoveredNetworks();
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null) return;
+
+      var currentNetwork = currentCity.CurrentNetwork;
+
+      // Get discovered network IDs from city
+      List<string> discoveredNetworkIds = currentCity.GetDiscoveredNetworks();
 
       context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
       WriteOutput(context, "DISCOVERED NETWORKS:");
@@ -149,18 +168,19 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         WriteOutput(context, "  - Compromise systems and scan their files");
         WriteOutput(context, "  - Look for VPN configurations and network diagrams");
         WriteOutput(context, "  - Check email for network references");
+        WriteOutput(context, "  - Use 'cat' on configuration files in /etc/openvpn/");
         WriteOutput(context, "");
         return;
       }
 
       // Get connection manager to check if networks are already connected
-      var connectionManager = city.GetConnectionManager();
+      var connectionManager = currentCity.GetConnectionManager();
       var activeConnections = connectionManager.GetActiveConnections();
 
       foreach (string networkId in discoveredNetworkIds)
       {
         // Skip the current network as it's already shown above
-        if (networkId == city.CurrentNetwork.NetworkId)
+        if (networkId == currentNetwork.NetworkId)
           continue;
 
         // Check if this network has an active connection
@@ -168,7 +188,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
         if (!isConnected)
         {
-          var networkInfoResult = city.GetNetworkInfo(networkId);
+          var networkInfoResult = currentCity.GetNetworkInfo(networkId);
 
           if (networkInfoResult.IsSuccess)
           {
@@ -189,6 +209,15 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             }
 
             WriteOutput(context, "         Status: Requires credentials or compromised gateway");
+
+            // Show if player has VPN credentials
+            bool hasVpnCreds = context.PlayerState.Credentials.HasVPNCredentialsFor(networkId);
+            if (hasVpnCreds)
+            {
+              context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
+              WriteOutput(context, "         [VPN CREDENTIALS AVAILABLE]");
+              context.Stdout.SetColor(Color.white);
+            }
           }
           else
           {

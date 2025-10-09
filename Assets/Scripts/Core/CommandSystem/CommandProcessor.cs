@@ -10,11 +10,7 @@ using SampleOS.Core.CommandSystem.Commands.CLI;
 using SampleOS.Core.CommandSystem.Commands.Systems;
 using SampleOS.Core.CommandSystem.Commands.Networking;
 using SampleOS.Core.CommandSystem.Commands.Vulnerabilities;
-using SampleOS.Core.Networking;
-using SampleOS.Core.World;
-using SampleOS.Core.Devices;
-using SampleOS.Core.Player;
-using SampleOS.Core.Session;
+using SampleOS.Core.Services;
 
 namespace SampleOS.Core.CommandSystem
 {
@@ -23,20 +19,12 @@ namespace SampleOS.Core.CommandSystem
         private Dictionary<string, ICommand> commands = new();
         private Dictionary<string, string> aliases = new();
 
-        private PlayerDevice playerDevice;           // The player's laptop/phone
-        private Device currentDevice;                 // Currently connected device (player's or remote)
-        private CommandEnvironment environment;
+        private IPlayerStateService playerState;
+        private IHackingSessionService hackingSession;
+        private IWorldService worldService;
 
         private IInteractiveCommand interactiveCommand;
         private CancellationTokenSource cancellationSource;
-
-        // Dependencies
-        private GameWorld gameWorld;
-        private PlayerSession session;
-        private PlayerVulnerabilityInventory vulnerabilityInventory;
-        private PlayerProgressManager progressManager;
-        private City city;
-        private PlayerCredentialManager credentialManager;
 
         public bool IsWaitingForInput => interactiveCommand?.IsWaitingForInput ?? false;
         public bool IsExecuting => cancellationSource != null;
@@ -49,33 +37,16 @@ namespace SampleOS.Core.CommandSystem
 
         private void Initialize()
         {
-            // Initialize game world first
-            gameWorld = new GameWorld();
-            session = new PlayerSession();
+            // Get services instead of creating state
+            playerState = ServiceLocator.Instance.Get<IPlayerStateService>();
+            hackingSession = ServiceLocator.Instance.Get<IHackingSessionService>();
+            worldService = ServiceLocator.Instance.Get<IWorldService>();
 
-            // Initialize world and network
-            city = new City("metropolis", "Metropolis");
-            environment = new CommandEnvironment();
-            gameWorld.RegisterCity(city);
-
-            environment = new CommandEnvironment();
-
-            // Create player's device
-            playerDevice = DeviceFactory.CreatePlayerDevice(
-                "player_laptop",
-                "localhost",
-                PlayerDevice.DeviceForm.Laptop
-            );
-
-            gameWorld.RegisterDevice(playerDevice);
-
-            // Start on player's device
-            currentDevice = playerDevice;
-
-            // Initialize player systems
-            credentialManager = new PlayerCredentialManager();
-            vulnerabilityInventory = new PlayerVulnerabilityInventory();
-            progressManager = new PlayerProgressManager(city.CurrentNetwork);
+            if (playerState == null || hackingSession == null || worldService == null)
+            {
+                Debug.LogError("Required services not initialized!");
+                return;
+            }
 
             // Register commands
             RegisterCommands();
@@ -88,7 +59,7 @@ namespace SampleOS.Core.CommandSystem
             Register(new ClearCommand());
             Register(new HelpCommand(commands));
             Register(new PsCommand(this));
-            Register(new QuitCommand(progressManager));
+            Register(new QuitCommand());
 
             // File Operations
             Register(new CatCommand());
@@ -104,16 +75,16 @@ namespace SampleOS.Core.CommandSystem
 
             // Networking
             Register(new NetstatCommand());
-            Register(new NetworksCommand(city));
-            Register(new SshCommand(this, session, gameWorld));
+            Register(new NetworksCommand());
+            Register(new SshCommand());
             Register(new NmapCommand());
-            Register(new OwnedCommand(progressManager));
-            Register(new VpnConnectCommand(city, credentialManager, this, session, gameWorld));
+            Register(new OwnedCommand());
+            Register(new VpnConnectCommand());
 
             // Vulnerabilities
-            Register(new ExploitCommand(this, vulnerabilityInventory, progressManager));
-            Register(new VulnScanCommand(vulnerabilityInventory));
-            Register(new VulnsCommand(vulnerabilityInventory));
+            Register(new ExploitCommand());
+            Register(new VulnScanCommand());
+            Register(new VulnsCommand());
         }
 
         private void Register(ICommand command)
@@ -177,13 +148,14 @@ namespace SampleOS.Core.CommandSystem
             CancellationToken cancellationToken = default)
         {
             return new CommandContext(
-                stdout, stderr,
-                currentDevice,          // Current device (player's or remote)
-                city.CurrentNetwork, // Current network
+                stdout,
+                stderr,
                 cancellationToken,
                 new Progress<CommandProgress>(p =>
                     Debug.Log($"Progress: {p.Percentage:P0} - {p.Message}")),
-                null, false, environment
+                null, // pipedInput
+                false, // isInteractive
+                null // environment (uses default)
             );
         }
 
@@ -324,10 +296,14 @@ namespace SampleOS.Core.CommandSystem
                     try
                     {
                         var linkedContext = new CommandContext(
-                            context.Stdout, context.Stderr,
-                            context.CurrentDevice, context.CurrentNetwork,
-                            cancellationSource.Token, context.Progress,
-                            context.PipedInput, context.IsInteractive, context.Environment);
+                            context.Stdout,
+                            context.Stderr,
+                            cancellationSource.Token,
+                            context.Progress,
+                            context.PipedInput,
+                            context.IsInteractive,
+                            context.Environment
+                        );
 
                         return await asyncCommand.ExecuteAsync(args, linkedContext);
                     }
@@ -460,95 +436,6 @@ namespace SampleOS.Core.CommandSystem
         public void CancelCurrentCommand()
         {
             cancellationSource?.Cancel();
-        }
-
-        /// <summary>
-        /// Sets the current device context (for SSH, exploits, etc.)
-        /// </summary>
-        public void SetCurrentDevice(Device device)
-        {
-            if (device == null)
-            {
-                Debug.LogWarning("Attempted to set null device");
-                return;
-            }
-
-            currentDevice = device;
-
-            Debug.Log($"Switched to device: {device.Hostname} ({device.IPAddress})");
-        }
-
-        /// <summary>
-        /// Gets the current device
-        /// </summary>
-        public Device GetCurrentDevice()
-        {
-            return currentDevice;
-        }
-
-        /// <summary>
-        /// Gets the player's personal device
-        /// </summary>
-        public PlayerDevice GetPlayerDevice()
-        {
-            return playerDevice;
-        }
-
-        /// <summary>
-        /// Gets the current network
-        /// </summary>
-        public VirtualNetwork GetCurrentNetwork()
-        {
-            return city.CurrentNetwork;
-        }
-
-        /// <summary>
-        /// Returns to the player's device
-        /// </summary>
-        public void ReturnToPlayerDevice()
-        {
-            SetCurrentDevice(playerDevice);
-            Debug.Log("Returned to local device");
-        }
-
-        /// <summary>
-        /// Checks if currently on a remote device
-        /// </summary>
-        public bool IsOnRemoteDevice()
-        {
-            return currentDevice != playerDevice;
-        }
-
-        /// <summary>
-        /// Gets the city context
-        /// </summary>
-        public City GetCity()
-        {
-            return city;
-        }
-
-        /// <summary>
-        /// Gets credential manager
-        /// </summary>
-        public PlayerCredentialManager GetCredentialManager()
-        {
-            return credentialManager;
-        }
-
-        /// <summary>
-        /// Gets vulnerability inventory
-        /// </summary>
-        public PlayerVulnerabilityInventory GetVulnerabilityInventory()
-        {
-            return vulnerabilityInventory;
-        }
-
-        /// <summary>
-        /// Gets progress manager
-        /// </summary>
-        public PlayerProgressManager GetProgressManager()
-        {
-            return progressManager;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Threading;
 using SampleOS.Core.Devices;
 using SampleOS.Core.FileSystem;
 using SampleOS.Core.Networking;
+using SampleOS.Core.Services;
 using SampleOS.Core.Terminal;
 
 namespace SampleOS.Core.CommandSystem
@@ -16,10 +17,6 @@ namespace SampleOS.Core.CommandSystem
         // I/O Streams
         public ITerminalStream Stdout { get; }
         public ITerminalStream Stderr { get; }
-
-        // Device & Network Context
-        public Device CurrentDevice { get; }           // The device we're currently executing on
-        public VirtualNetwork CurrentNetwork { get; }   // The network we're connected to
 
         // Execution Control
         public CancellationToken CancellationToken { get; }
@@ -35,16 +32,33 @@ namespace SampleOS.Core.CommandSystem
         // Environment
         public CommandEnvironment Environment { get; }
 
-        // Convenience accessors
+        // Convenience accessors to services (lazy loaded)
+        private IPlayerStateService _playerState;
+        private IHackingSessionService _hackingSession;
+        private IWorldService _worldService;
+        private INetworkService _networkService;
+
+        public IPlayerStateService PlayerState =>
+            _playerState ??= ServiceLocator.Instance.Get<IPlayerStateService>();
+
+        public IHackingSessionService HackingSession =>
+            _hackingSession ??= ServiceLocator.Instance.Get<IHackingSessionService>();
+
+        public IWorldService WorldService =>
+            _worldService ??= ServiceLocator.Instance.Get<IWorldService>();
+
+        public INetworkService NetworkService =>
+            _networkService ??= ServiceLocator.Instance.Get<INetworkService>();
+
+        // Convenience accessors (delegate to services)
+        public Device CurrentDevice => HackingSession?.CurrentDevice;
         public VirtualFileSystem FileSystem => CurrentDevice?.FileSystem;
-        // public string CurrentPath => Environment?.GetVariable("PWD") ?? "/";
-        public bool IsRemoteConnection => CurrentDevice != null && CurrentDevice.GetType() == typeof(RemoteDevice);
+        public VirtualNetwork CurrentNetwork => WorldService?.GetCurrentCity()?.CurrentNetwork;
+        public bool IsRemoteSession => HackingSession?.IsOnRemoteDevice ?? false;
 
         public CommandContext(
             ITerminalStream stdout,
             ITerminalStream stderr,
-            Device currentDevice,
-            VirtualNetwork currentNetwork,
             CancellationToken cancellationToken = default,
             IProgress<CommandProgress> progress = null,
             string pipedInput = null,
@@ -53,8 +67,6 @@ namespace SampleOS.Core.CommandSystem
         {
             Stdout = stdout;
             Stderr = stderr;
-            CurrentDevice = currentDevice;
-            CurrentNetwork = currentNetwork;
             CancellationToken = cancellationToken;
             Progress = progress ?? new Progress<CommandProgress>();
             PipedInput = pipedInput;
@@ -68,8 +80,8 @@ namespace SampleOS.Core.CommandSystem
         public CommandContext WithPipedInput(string input)
         {
             return new CommandContext(
-                Stdout, Stderr, CurrentDevice, CurrentNetwork,
-                CancellationToken, Progress, input, IsInteractive, Environment);
+                Stdout, Stderr, CancellationToken, Progress,
+                input, IsInteractive, Environment);
         }
 
         /// <summary>
@@ -81,56 +93,10 @@ namespace SampleOS.Core.CommandSystem
             var stderrBuffer = new BufferedStream();
 
             var context = new CommandContext(
-                stdoutBuffer, stderrBuffer, CurrentDevice, CurrentNetwork,
-                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
+                stdoutBuffer, stderrBuffer, CancellationToken, Progress,
+                PipedInput, IsInteractive, Environment);
 
             return (context, stdoutBuffer, stderrBuffer);
-        }
-
-        /// <summary>
-        /// Create a new context for a different device (e.g., after SSH)
-        /// </summary>
-        public CommandContext WithDevice(Device device)
-        {
-            return new CommandContext(
-                Stdout, Stderr, device, CurrentNetwork,
-                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
-        }
-
-        /// <summary>
-        /// Create a new context for a different network (e.g., after VPN connect)
-        /// </summary>
-        public CommandContext WithNetwork(VirtualNetwork network)
-        {
-            return new CommandContext(
-                Stdout, Stderr, CurrentDevice, network,
-                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
-        }
-
-        /// <summary>
-        /// Checks if we're currently connected to a remote device
-        /// </summary>
-        public bool IsRemoteSession => CurrentDevice is RemoteDevice;
-
-        /// <summary>
-        /// Checks if we're on the player's local device
-        /// </summary>
-        public bool IsLocalSession => CurrentDevice is PlayerDevice;
-
-        /// <summary>
-        /// Gets the current device as a RemoteDevice (if applicable)
-        /// </summary>
-        public RemoteDevice GetRemoteDevice()
-        {
-            return CurrentDevice as RemoteDevice;
-        }
-
-        /// <summary>
-        /// Gets the current device as a PlayerDevice (if applicable)
-        /// </summary>
-        public PlayerDevice GetPlayerDevice()
-        {
-            return CurrentDevice as PlayerDevice;
         }
     }
 

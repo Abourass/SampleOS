@@ -1,28 +1,42 @@
 using SampleOS.Core.Devices;
+using System;
 
 namespace SampleOS.Core.Apps
 {
   /// <summary>
-  /// Represents an app that the player can actually interact with
-  /// Not just software that exists, but software with a UI
+  /// Represents an interactive app instance running on a specific device
+  /// Each instance is tied to a device and has its own state
   /// </summary>
   public interface IInteractiveApp
   {
-    string AppId { get; }
-    string DisplayName { get; }
+    // Unique instance identifier (not app type)
+    string InstanceId { get; }
+    
+    // App metadata
+    string AppId { get; }           // e.g., "terminal", "email"
+    string DisplayName { get; }     // e.g., "Terminal", "Email Client"
     AppCategory Category { get; }
-
-    // Which devices can run this app?
-    bool CanRunOnDevice(Device device);
-
+    
+    // Device binding (NEW)
+    Device HostDevice { get; }
+    
+    // Lifecycle
+    void Initialize(Device hostDevice);
+    void Update(float deltaTime);
+    void Shutdown();
+    
     // UI integration
     void OnAppOpened();
     void OnAppClosed();
-    void RenderUI(); // Called by Unity UI system
-
-    // Save state when switching apps
+    void OnFocusGained();
+    void OnFocusLost();
+    
+    // State management
     object SerializeState();
     void DeserializeState(object state);
+    
+    // Which devices can run this app?
+    bool CanRunOnDevice(Device device);
   }
 
   public enum AppCategory
@@ -34,10 +48,10 @@ namespace SampleOS.Core.Apps
     TextEditor,
     IRC,
     Messenger,
-    Security,     // Firewall, antivirus, etc.
-    Development,  // IDEs, debuggers
-    System,       // Settings, task manager
-    Game,         // In-game minigames
-    Custom        // Story-specific apps
+    Security,
+    Development,
+    System,
+    Game,
+    Custom
   }
 }

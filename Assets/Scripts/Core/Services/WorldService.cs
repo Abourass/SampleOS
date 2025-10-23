@@ -99,32 +99,15 @@ namespace SampleOS.Core.Services
 
     public List<Device> GetDevicesAtLocation(PhysicalLocation location)
     {
-      // Query devices that are physically at this location
-      var devices = new List<Device>();
-
-      // PhysicalLocation has DeviceIds list
-      foreach (var deviceId in location.DeviceIds)
-      {
-        var device = currentCity.CurrentNetwork.GetAllDevices()
-            .Find(d => d.DeviceId == deviceId);
-
-        if (device != null)
-        {
-          devices.Add(device);
-        }
-      }
-
-      return devices;
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesAtLocation(location);
     }
 
     public void UpdateDeviceOwnership(Device device)
     {
-      // Mark device as compromised/owned by player
-      // Since Device doesn't have IsCompromised, we'll track it differently
-      // Perhaps add to player's owned devices or set a flag in metadata (or maybe just add IsCompromised property)
-
       Debug.Log($"Device {device.Hostname} is now compromised");
 
+      device.IsCompromised = true;
       // Trigger event
       GameEvents.Instance.Trigger(GameEventType.DeviceCompromised, device);
     }

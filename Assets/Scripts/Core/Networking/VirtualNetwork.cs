@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SampleOS.Core.Networking.Access;
 using SampleOS.Core.Devices;
+using SampleOS.Core.Services;
 
 namespace SampleOS.Core.Networking
 {
@@ -34,7 +35,8 @@ namespace SampleOS.Core.Networking
     public NetworkMetadata Metadata { get; private set; }
     public NetworkSecurityProfile SecurityProfile { get; private set; }
 
-    private Dictionary<string, Device> Devices = new Dictionary<string, Device>();
+    // private Dictionary<string, Device> Devices = new Dictionary<string, Device>();
+    private HashSet<string> deviceIDs = new HashSet<string>();
     public List<NetworkGateway> Gateways { get; private set; } = new List<NetworkGateway>();
 
 
@@ -43,7 +45,7 @@ namespace SampleOS.Core.Networking
       NetworkId = id;
       Metadata = metadata;
       SecurityProfile = security;
-      Devices = new Dictionary<string, Device>();
+      deviceIDs = new HashSet<string>();
       Gateways = new List<NetworkGateway>();
     }
 
@@ -77,17 +79,21 @@ namespace SampleOS.Core.Networking
     /// </summary>
     public void AddDevice(Device device)
     {
-      device.NetworkId = NetworkId;
-      Devices[device.DeviceId] = device;
+      deviceIDs.Add(device.DeviceId);
+      device.JoinNetwork(NetworkId);
+      
+      // Register with global registry (don't we already initialize these in the registry so this duplicates?)
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      registry.RegisterDevice(device);
     }
 
     /// <summary>
     /// Gets a device by its ID
     /// </summary>
-    public Device GetDevice(string deviceId)
+    public List<Device> GetAllDevices()
     {
-      Devices.TryGetValue(deviceId, out var device);
-      return device;
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesOnNetwork(NetworkId);
     }
 
     /// <summary>
@@ -95,7 +101,8 @@ namespace SampleOS.Core.Networking
     /// </summary>
     public Device GetDeviceByIP(string ip)
     {
-      return Devices.Values.FirstOrDefault(d => d.IPAddress == ip);
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesOnNetwork(NetworkId).FirstOrDefault(d => d.IPAddress == ip);
     }
 
     /// <summary>
@@ -103,15 +110,8 @@ namespace SampleOS.Core.Networking
     /// </summary>
     public Device GetDeviceByHostname(string hostname)
     {
-      return Devices.Values.FirstOrDefault(d => d.Hostname == hostname);
-    }
-
-    /// <summary>
-    /// Gets all devices on this network
-    /// </summary>
-    public List<Device> GetAllDevices()
-    {
-      return Devices.Values.ToList();
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesOnNetwork(NetworkId).FirstOrDefault(d => d.Hostname == hostname);
     }
 
     /// <summary>
@@ -135,7 +135,7 @@ namespace SampleOS.Core.Networking
     /// </summary>
     public void Clear()
     {
-      Devices.Clear();
+      deviceIDs.Clear();
       Gateways.Clear();
     }
 

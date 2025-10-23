@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
+using SampleOS.Core.Devices;
 using SampleOS.Core.Networking;
 using SampleOS.Core.Networking.Discovery;
+using SampleOS.Core.Services;
 using UnityEngine;
 
 namespace SampleOS.Core.World
@@ -220,6 +222,22 @@ namespace SampleOS.Core.World
         TotalDevices = networks.Values.Sum(n => n.GetAllDevices().Count),
         TotalClues = clues.Count
       };
+    }
+
+    #endregion
+
+    #region Device Management
+
+    public List<Device> GetDevicesInCity()
+    {
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesInCity(CityId);
+    }
+
+    public List<Device> GetDevicesAtLocation(PhysicalLocation location)
+    {
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesAtLocation(location);
     }
 
     #endregion

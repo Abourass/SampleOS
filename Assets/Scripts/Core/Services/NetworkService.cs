@@ -59,8 +59,6 @@ namespace SampleOS.Core.Services
   public class NetworkService : INetworkService
   {
     private List<VirtualNetwork> networks;
-    private Dictionary<string, Device> deviceCache; // Fast lookup by DeviceId
-    private Dictionary<string, List<Device>> locationIndex; // Fast lookup by LocationId
 
     // Connection management
     private Dictionary<string, NetworkConnection> activeConnections = new Dictionary<string, NetworkConnection>();
@@ -82,37 +80,9 @@ namespace SampleOS.Core.Services
     public void Initialize(List<VirtualNetwork> networkList)
     {
       networks = networkList;
-
-      // Build indices for fast lookups
-      BuildDeviceIndices();
       InitializeAccessProfiles();
 
-      Debug.Log($"Network service initialized with {deviceCache.Count} devices across {networks.Count} networks");
-    }
-
-    private void BuildDeviceIndices()
-    {
-      deviceCache = new Dictionary<string, Device>();
-      locationIndex = new Dictionary<string, List<Device>>();
-
-      foreach (var network in networks)
-      {
-        foreach (var device in network.GetAllDevices())
-        {
-          // Add to device cache
-          deviceCache[device.DeviceId] = device;
-
-          // Add to location index if device has a physical location
-          if (!string.IsNullOrEmpty(device.LocationId))
-          {
-            if (!locationIndex.ContainsKey(device.LocationId))
-            {
-              locationIndex[device.LocationId] = new List<Device>();
-            }
-            locationIndex[device.LocationId].Add(device);
-          }
-        }
-      }
+        Debug.Log($"Network service initialized with {networks.Count} networks");
     }
 
     #region Connection Management
@@ -503,47 +473,34 @@ namespace SampleOS.Core.Services
 
     public List<Device> GetDevicesInNetwork(string networkId)
     {
-      var network = networks.FirstOrDefault(n => n.NetworkId == networkId);
-      return network?.GetAllDevices() ?? new List<Device>();
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesOnNetwork(networkId);
     }
 
     public List<Device> GetDevicesAtLocation(PhysicalLocation location)
     {
-      // Use location index for O(1) lookup instead of iterating all devices
-      if (locationIndex.TryGetValue(location.LocationId, out var devices))
-      {
-        return new List<Device>(devices);
-      }
-
-      return new List<Device>();
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevicesAtLocation(location);
     }
 
     public Device GetDeviceById(string deviceId)
     {
-      deviceCache.TryGetValue(deviceId, out var device);
-      return device;
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+      return registry.GetDevice(deviceId);
     }
 
     public List<Device> GetDevicesInRadius(Vector3 center, float radius)
     {
-      // Spatial query for devices within radius
-      // This is O(n) but only called when player is physically exploring
-      var devicesInRadius = new List<Device>();
-      float radiusSquared = radius * radius; // Avoid sqrt calculations
+      // Delegate spatial queries to registry
+      var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
 
-      foreach (var device in deviceCache.Values)
+      // Create a temporary location for the query
+      var tempLocation = new PhysicalLocation
       {
-        if (device.PhysicalPosition.HasValue)
-        {
-          float distanceSquared = (device.PhysicalPosition.Value - center).sqrMagnitude;
-          if (distanceSquared <= radiusSquared)
-          {
-            devicesInRadius.Add(device);
-          }
-        }
-      }
+        WorldPosition = center
+      };
 
-      return devicesInRadius;
+      return registry.GetDevicesNearLocation(tempLocation, radius);
     }
 
     public VirtualNetwork GetNetwork(string networkId)
@@ -678,8 +635,6 @@ namespace SampleOS.Core.Services
 
         // Restore unlocked networks
         unlockedNetworks = new HashSet<string>(data.unlockedNetworks ?? new List<string>());
-
-        BuildDeviceIndices();
       }
     }
 

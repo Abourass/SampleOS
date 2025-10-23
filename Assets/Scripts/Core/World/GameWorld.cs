@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using SampleOS.Core.Devices;
 using SampleOS.Core.Networking;
+using SampleOS.Core.Services;
 
 namespace SampleOS.Core.World
 {
@@ -11,13 +12,11 @@ namespace SampleOS.Core.World
   {
     private Dictionary<string, City> cities;
     private Dictionary<string, VirtualNetwork> networks;
-    private Dictionary<string, Device> allDevices; // Global device registry
 
     public GameWorld()
     {
       cities = new Dictionary<string, City>();
       networks = new Dictionary<string, VirtualNetwork>();
-      allDevices = new Dictionary<string, Device>();
     }
 
     public void RegisterCity(City city)
@@ -50,34 +49,21 @@ namespace SampleOS.Core.World
 
     public void RegisterDevice(Device device)
     {
-      allDevices[device.DeviceId] = device;
+        // Delegate to DeviceRegistry instead
+        var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+        registry.RegisterDevice(device);
     }
-
+    
     public Device FindDevice(string identifier)
     {
-      // Try device ID first
-      if (allDevices.TryGetValue(identifier, out var device))
+        var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+        
+        // Try hostname, then IP
+        var device = registry.GetDeviceByHostname(identifier);
+        if (device == null)
+            device = registry.GetDeviceByIP(identifier);
+        
         return device;
-
-      // Try hostname
-      foreach (var dev in allDevices.Values)
-      {
-        if (dev.Hostname == identifier || dev.IPAddress == identifier)
-          return dev;
-      }
-
-      return null;
-    }
-
-    public List<Device> GetDevicesAtLocation(string locationId)
-    {
-      var result = new List<Device>();
-      foreach (var device in allDevices.Values)
-      {
-        if (device.LocationId == locationId)
-          result.Add(device);
-      }
-      return result;
     }
 
     public VirtualNetwork GetDeviceNetwork(Device device)

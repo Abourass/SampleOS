@@ -15,6 +15,12 @@ namespace SampleOS.Core.Services
     NearbyDevicesChanged,
     NetworkChanged,
 
+    // Device Events
+    DeviceLocationChanged,
+    DeviceFileSystemChanged,
+    DeviceBackdoorInstalled,
+    DeviceBackdoorRemoved,
+
     // World events
     TimeProgressed,
     DayChanged,

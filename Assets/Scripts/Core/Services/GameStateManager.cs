@@ -42,17 +42,22 @@ namespace SampleOS.Core.Services
     {
       Debug.Log("=== Initializing Game State ===");
 
-      // 0. Initialize Vulnerability Database (needed by other services)
+      // 0. Initialize Device Registry (needed by World and Network services)
+      var deviceRegistry = new DeviceRegistry();
+      ServiceLocator.Instance.Register<IDeviceRegistry>(deviceRegistry);
+      deviceRegistry.Initialize();
+
+      // 1. Initialize Vulnerability Database (needed by other services)
       var vulnDbService = new VulnerabilityDatabaseService();
       ServiceLocator.Instance.Register<IVulnerabilityDatabaseService>(vulnDbService);
       vulnDbService.Initialize();
 
-      // 1. Initialize World (Cities, Networks, NPCs)
+      // 2. Initialize World (Cities, Networks, NPCs)
       var worldService = new WorldService();
       ServiceLocator.Instance.Register<IWorldService>(worldService);
       worldService.Initialize(startingCityId);
 
-      // 2. Initialize Player State (Owned devices, inventory, progress)
+      // 3. Initialize Player State (Owned devices, inventory, progress)
       var playerService = new PlayerStateService();
       ServiceLocator.Instance.Register<IPlayerStateService>(playerService);
 
@@ -60,16 +65,11 @@ namespace SampleOS.Core.Services
       var playerDevice = worldService.GetPlayerDevice();
       playerService.Initialize(playerDevice);
 
-      // 3. Initialize Hacking Session Manager (Active connections, exploits)
-      var hackingService = new HackingSessionService();
-      ServiceLocator.Instance.Register<IHackingSessionService>(hackingService);
-      hackingService.Initialize(playerDevice);
-
-      // 4. Initialize Network Simulation (Device states, security updates)
+      // 5. Initialize Network Simulation (Device states, security updates)
       var networkService = new NetworkService();
       networkService.Initialize(worldService.GetAllNetworks());
 
-      // 5. Setup cross-layer event subscriptions
+      // 6. Setup cross-layer event subscriptions
       SetupEventBridge();
 
       Debug.Log("=== Game State Initialized ===");
@@ -82,20 +82,12 @@ namespace SampleOS.Core.Services
     {
       var worldService = ServiceLocator.Instance.Get<IWorldService>();
       var networkService = ServiceLocator.Instance.Get<INetworkService>();
-      var hackingService = ServiceLocator.Instance.Get<IHackingSessionService>();
 
       // Example: When player physically enters a building, scan for nearby devices
       worldService.OnPlayerLocationChanged += (location) =>
       {
         var nearbyDevices = networkService.GetDevicesAtLocation(location);
         GameEvents.Instance.Trigger(GameEventType.NearbyDevicesChanged, nearbyDevices);
-      };
-
-      // When a device is compromised, update world state
-      hackingService.OnDeviceCompromised += (device) =>
-      {
-        worldService.UpdateDeviceOwnership(device);
-        GameEvents.Instance.Trigger(GameEventType.DeviceCompromised, device);
       };
 
       // Time progression affects network security
@@ -110,7 +102,6 @@ namespace SampleOS.Core.Services
       // Each service updates at its own rate
       ServiceLocator.Instance.Get<IWorldService>()?.Update(Time.deltaTime);
       ServiceLocator.Instance.Get<INetworkService>()?.Update(Time.deltaTime);
-      ServiceLocator.Instance.Get<IHackingSessionService>()?.Update(Time.deltaTime);
     }
 
     public void SaveGameState()

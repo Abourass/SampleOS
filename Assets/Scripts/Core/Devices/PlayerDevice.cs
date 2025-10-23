@@ -13,6 +13,7 @@ namespace SampleOS.Core.Devices
 
     // UI State for this device
     public DeviceUIState UIState { get; private set; }
+    
 
     public enum DeviceForm
     {

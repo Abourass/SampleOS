@@ -174,3 +174,93 @@ We will create pixel art of a physical cork board with red string connecting thi
 │  ✓ Underground Hacker Meetup Location   │
 └─────────────────────────────────────────┘
 ```
+
+# Sererate But Coordinated
+
+We need to keep the Lead System and the Quest system tightly synced to we should likely handle something like
+
+```C#
+public class ProgressionCoordinator{
+    private IQuestManager questManager;
+    private ILeadManager leadManager;
+
+    public void Initialize()
+    {
+        // This service orchestrates the two
+        leadManager.OnLeadCreated += (lead) =>
+        {
+            questManager.CheckIfLeadUnlocksQuests(lead);
+        };
+        questManager.OnQuestUnlocked += (quest) =>
+        {
+            leadManager.UpdateLeadsRelatedToQuest(quest);
+        };
+    }
+}
+```
+
+Keep them separate but add a coordinator service that handles their interaction. Best of both worlds.
+
+### Lead Auto-Generation
+
+Hybrid Event + Validation (My Recommendation)
+
+```C#
+public class LeadManager : ILeadManager
+{
+    private HashSet<string> processedDevices = new HashSet<string>();
+    
+    public void Initialize()
+    {
+        // Primary: Event-driven
+        GameEvents.Instance.Subscribe(GameEventType.DeviceDiscovered, OnDeviceDiscovered);
+        
+        // Fallback: Occasional validation sweep
+        StartCoroutine(ValidationSweep());
+    }
+    
+    private void OnDeviceDiscovered(object data)
+    {
+        var device = data as Device;
+        
+        if (processedDevices.Contains(device.DeviceId))
+            return; // Already have a lead for this
+            
+        CreateLeadForDevice(device);
+        processedDevices.Add(device.DeviceId);
+    }
+    
+    private IEnumerator ValidationSweep()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(60f); // Once per minute
+            
+            // Catch any devices we missed
+            var registry = ServiceLocator.Instance.Get<IDeviceRegistry>();
+            var allDevices = registry.GetAllDevices();
+            
+            foreach (var device in allDevices)
+            {
+                if (!processedDevices.Contains(device.DeviceId))
+                {
+                    Debug.LogWarning($"[LeadManager] Caught missed device: {device.Hostname}");
+                    CreateLeadForDevice(device);
+                }
+            }
+        }
+    }
+}
+```
+
+**Pros**:
+
+- ✅ Fast primary path: Events give instant feedback
+- ✅ Safety net: Polling catches anything events missed
+- ✅ Best of both: Performance of events + reliability of polling
+- ✅ Debuggable: Warning log shows if events are failing
+
+**Cons**:
+
+- ❌ More complex: Two code paths to maintain
+- ❌ Small overhead: Still does occasional sweeps

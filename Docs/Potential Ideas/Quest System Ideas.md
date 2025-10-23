@@ -191,3 +191,53 @@ public class QuestManager : MonoBehaviour
 ```
 
 Now I think that Quest Tracking and Lead Tracking should likely remain two separate systems, but have relationship too one another. See [[Lead System Ideas]]
+
+## Quest Design
+
+Hybrid Approach
+
+- Quest structure in ScriptableObjects (high-level data)
+- Complex conditions in code (inheritance, polymorphism)
+- String IDs link the two together
+
+```C#
+// ScriptableObject for quest metadata
+[CreateAssetMenu]
+public class QuestData : ScriptableObject
+{
+    public string questId;
+    public string questName;
+    public List<string> unlockConditionIds; // "time_monday_9am", "karma_whithat_50"
+    public List<ObjectiveData> objectives;
+}
+
+// Code defines reusable conditions
+public class QuestConditionRegistry
+{
+    private static Dictionary<string, QuestCondition> conditions = new()
+    {
+        ["time_monday_9am"] = new TimeCondition(DayOfWeek.Monday, 9),
+        ["karma_whitehat_50"] = new KarmaCondition(50, 100),
+        ["sarah_trust_70"] = new RelationshipCondition("sarah", 70)
+    };
+    public static QuestCondition Get(string id) => conditions[id];
+}
+```
+
+**Pros**:
+
+- ✅ Best of both worlds: Visual quest editing + powerful condition logic
+- ✅ Reusable conditions: "sarah_trust_70" used across multiple quests
+- ✅ Designer-friendly for data: Programmers build tools, designers use them
+- ✅ Type-safe where it matters: Condition logic is compiled
+
+**Cons**:
+
+- ❌ More initial setup: Need to build both systems
+- ❌ Two sources of truth: Strings link SO to code (could break)
+
+## Quest Dependency Graph Validation
+
+Graph Visualization Tool
+
+We create a custom Unity editor window that shows quest dependencies as a visual graph (like Unity's Animator or Shader Graph).

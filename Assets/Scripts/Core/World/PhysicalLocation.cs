@@ -23,8 +23,8 @@ namespace SampleOS.Core.World
     
     // NEW: Devices physically at this location (optional - registry is source of truth)
     public List<string> DeviceIds { get; set; } = new List<string>();
-    
-    // NEW: Distance calculation
+
+    // Distance calculation
     public float DistanceTo(PhysicalLocation other)
     {
       if (other == null) return float.MaxValue;

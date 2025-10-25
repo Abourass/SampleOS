@@ -202,6 +202,81 @@ Dictionary<string, HashSet<string>> seenDialogueNodes;
 bool hasSeenNode = dialogueService.HasSeenNode("sarah", "ask_about_phoenix");
 ```
 
+### Conversation History (Detailed)
+
+Conversation history is stored in `NPCManager` and accessed through `IDialogueService`. This centralized approach keeps all player-NPC interaction data together.
+
+**Data Structure:**
+
+```csharp
+[System.Serializable]
+public class ConversationHistory
+{
+    public string NpcId;
+    
+    // Seen dialogue nodes (Ink knot paths)
+    public HashSet<string> SeenNodes = new HashSet<string>();
+    
+    // Choices made (for analytics/debugging)
+    public List<ConversationChoice> ChoicesMade = new List<ConversationChoice>();
+    
+    // Conversation flags (persistent state)
+    public Dictionary<string, bool> Flags = new Dictionary<string, bool>();
+    
+    // Metadata
+    public DateTime FirstInteraction;
+    public DateTime LastInteraction;
+    public int TotalInteractions;
+}
+
+[System.Serializable]
+public class ConversationChoice
+{
+    public string NodeId;           // Where this choice was made
+    public string ChoiceText;       // What the player chose
+    public DateTime Timestamp;      // When they made this choice
+}
+```
+
+**NPCManager Interface Extension:**
+
+```csharp
+public interface INPCManager
+{
+    // === Dialogue History ===
+    void MarkDialogueNodeSeen(string npcId, string nodeId);
+    bool HasSeenDialogueNode(string npcId, string nodeId);
+    HashSet<string> GetSeenNodes(string npcId);
+    
+    void RecordDialogueChoice(string npcId, string choiceText);
+    List<ConversationChoice> GetDialogueChoices(string npcId);
+    
+    void SetConversationFlag(string npcId, string flagName, bool value);
+    bool HasConversationFlag(string npcId, string flagName);
+    Dictionary<string, bool> GetConversationFlags(string npcId);
+    
+    void UpdateLastInteraction(string npcId, DateTime time);
+    DateTime GetLastInteraction(string npcId);
+    
+    ConversationHistory GetConversationHistory(string npcId);
+    void ClearConversationHistory(string npcId); // For debugging
+}
+```
+
+**Save Strategy:**
+
+- **Save completed nodes only** (not mid-conversation state)
+- Store metadata (timestamps, choice history) for analytics
+- Conversation flags persist between sessions
+- No Ink story state saved (re-injected from game state on dialogue start)
+
+**Benefits:**
+
+- ✅ Single source of truth for all NPC-player interactions
+- ✅ Easy to query: "Which NPCs has player talked to?" "What choices did they make?"
+- ✅ Efficient serialization: One dictionary to save
+- ✅ Works seamlessly with DialogueService (reads/writes through NPCManager)
+
 ### Why Separate from NPC Objects?
 
 - **Player-centric:** All progression data in one conceptual space
@@ -209,6 +284,7 @@ bool hasSeenNode = dialogueService.HasSeenNode("sarah", "ask_about_phoenix");
 - **Clean NPC data:** NPCs don't carry player-specific state
 - **Easy comparisons:** "Top 5 trusted NPCs" is one query
 - **Milestone logic:** Centralized in RelationshipService, not scattered
+- **Conversation tracking:** All dialogue history accessible from one manager
 
 ---
 

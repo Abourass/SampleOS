@@ -1,142 +1,142 @@
-using UnityEngine;
-using System.Collections.Generic;
-using System.Linq;
-using SampleOS.Core.FileSystem;
-using SampleOS.Core.SoftwarePackages;
+// using UnityEngine;
+// using System.Collections.Generic;
+// using System.Linq;
+// using SampleOS.Core.FileSystem;
+// using SampleOS.Core.SoftwarePackages;
 
-/// <summary>
-/// Loads NetworkScenario assets and applies them to the game world
-/// </summary>
-public class ScenarioLoader : MonoBehaviour
-{
-  [SerializeField] private VirtualNetwork virtualNetwork;
-  [SerializeField] private SoftwareDatabase softwareDatabase;
-  [SerializeField] private VulnerabilityDatabase vulnerabilityDatabase;
-  [SerializeField] private DeviceTypeDatabase deviceTypeDatabase;
+// /// <summary>
+// /// Loads NetworkScenario assets and applies them to the game world
+// /// </summary>
+// public class ScenarioLoader : MonoBehaviour
+// {
+//   [SerializeField] private VirtualNetwork virtualNetwork;
+//   [SerializeField] private SoftwareDatabase softwareDatabase;
+//   [SerializeField] private VulnerabilityDatabase vulnerabilityDatabase;
+//   [SerializeField] private DeviceTypeDatabase deviceTypeDatabase;
 
-  /// <summary>
-  /// Load and apply a network scenario
-  /// </summary>
-  public Result<bool> LoadScenario(NetworkScenario scenario)
-  {
-    if (scenario == null)
-      return Result<bool>.Failure("Scenario is null");
+//   /// <summary>
+//   /// Load and apply a network scenario
+//   /// </summary>
+//   public Result<bool> LoadScenario(NetworkScenario scenario)
+//   {
+//     if (scenario == null)
+//       return Result<bool>.Failure("Scenario is null");
 
-    try
-    {
-      // Clear existing network
-      // TODO Make a more clear way to do this, maybe don't Factory pattern it
-      // Or maybe do, I'm not sure yet. Maybe clearing is the more straight forward way
-      virtualNetwork.ClearNetwork();
+//     try
+//     {
+//       // Clear existing network
+//       // TODO Make a more clear way to do this, maybe don't Factory pattern it
+//       // Or maybe do, I'm not sure yet. Maybe clearing is the more straight forward way
+//       // virtualNetwork.ClearNetwork();
 
-      // Create devices from scenario
-      foreach (var deviceDef in scenario.devices)
-      {
-        var result = CreateDevice(deviceDef, scenario.network);
-        if (result.IsFailure)
-          return Result<bool>.Failure($"Failed to create device {deviceDef.deviceName}: {result.ErrorMessage}");
-      }
+//       // Create devices from scenario
+//       // foreach (var deviceDef in scenario.devices)
+//       // {
+//       //   var result = CreateDevice(deviceDef, scenario.network);
+//       //   if (result.IsFailure)
+//       //     return Result<bool>.Failure($"Failed to create device {deviceDef.deviceName}: {result.ErrorMessage}");
+//       // }
 
-      Debug.Log($"Successfully loaded scenario: {scenario.scenarioId}");
-      return Result<bool>.Success(true);
-    }
-    catch (System.Exception e)
-    {
-      return Result<bool>.Failure($"Exception loading scenario: {e.Message}");
-    }
-  }
+//       Debug.Log($"Successfully loaded scenario: {scenario.scenarioId}");
+//       return Result<bool>.Success(true);
+//     }
+//     catch (System.Exception e)
+//     {
+//       return Result<bool>.Failure($"Exception loading scenario: {e.Message}");
+//     }
+//   }
 
-  private Result<NetworkDevice> CreateDevice(DeviceDefinition def, NetworkDefinition network)
-  {
-    // Create the device
-    // TODO Make this method
-    var device = virtualNetwork.CreateDevice(
-        def.deviceName,
-        def.ipAddress,
-        def.deviceType
-    );
+//   private Result<NetworkDevice> CreateDevice(DeviceDefinition def, NetworkDefinition network)
+//   {
+//     // Create the device
+//     // TODO Make this method
+//     var device = virtualNetwork.CreateDevice(
+//         def.deviceName,
+//         def.ipAddress,
+//         def.deviceType
+//     );
 
-    if (device == null)
-      return Result<NetworkDevice>.Failure($"Failed to create network device");
+//     if (device == null)
+//       return Result<NetworkDevice>.Failure($"Failed to create network device");
 
-    // Add credentials
-    foreach (var cred in def.credentials)
-    {
-      device.AddCredential(cred.username, cred.password);
-    }
+//     // Add credentials
+//     foreach (var cred in def.credentials)
+//     {
+//       device.AddCredential(cred.username, cred.password);
+//     }
 
-    // Install software
-    foreach (var softwareInstall in def.installedSoftware)
-    { // TODO Create method
-      var software = softwareDatabase.GetSoftware(softwareInstall.softwareId);
-      if (software != null)
-      {
-        device.InstallSoftware(software, softwareInstall.version);
+//     // Install software
+//     foreach (var softwareInstall in def.installedSoftware)
+//     { // TODO Create method
+//       var software = softwareDatabase.GetSoftware(softwareInstall.softwareId);
+//       if (software != null)
+//       {
+//         device.InstallSoftware(software, softwareInstall.version);
 
-        // Add vulnerabilities
-        foreach (var vulnId in softwareInstall.vulnerabilityIds)
-        { // TODO create method
-          var vuln = vulnerabilityDatabase.GetVulnerability(vulnId);
-          if (vuln != null)
-          {
-            device.AddVulnerability(vuln);
-          }
-        }
-      }
-    }
+//         // Add vulnerabilities
+//         foreach (var vulnId in softwareInstall.vulnerabilityIds)
+//         { // TODO create method
+//           var vuln = vulnerabilityDatabase.GetVulnerability(vulnId);
+//           if (vuln != null)
+//           {
+//             device.AddVulnerability(vuln);
+//           }
+//         }
+//       }
+//     }
 
-    // Setup filesystem based on mode
-    var fsResult = SetupFileSystem(device, def);
-    if (fsResult.IsFailure)
-      return Result<NetworkDevice>.Failure(fsResult.ErrorMessage);
+//     // Setup filesystem based on mode
+//     var fsResult = SetupFileSystem(device, def);
+//     if (fsResult.IsFailure)
+//       return Result<NetworkDevice>.Failure(fsResult.ErrorMessage);
 
-    return Result<NetworkDevice>.Success(device);
-  }
+//     return Result<NetworkDevice>.Success(device);
+//   }
 
-  private Result<bool> SetupFileSystem(NetworkDevice device, DeviceDefinition def)
-  { // TODO Make this method
-    var fs = device.GetFileSystem();
+//   private Result<bool> SetupFileSystem(NetworkDevice device, DeviceDefinition def)
+//   { // TODO Make this method
+//     // var fs = device.GetFileSystem();
 
-    switch (def.fileSystemMode)
-    {
-      case FileSystemMode.FullyGenerated:
-        // Already generated by device creation
-        break;
+//     switch (def.fileSystemMode)
+//     {
+//       case FileSystemMode.FullyGenerated:
+//         // Already generated by device creation
+//         break;
 
-      case FileSystemMode.CustomOnly:
-        // Clear generated files and add only custom ones
-        fs.Clear();
-        fs.CreateDirectory("/");
-        AddCustomFiles(fs, def.customFiles);
-        break;
+//       case FileSystemMode.CustomOnly:
+//         // Clear generated files and add only custom ones
+//         // fs.Clear();
+//         // fs.CreateDirectory("/");
+//         // AddCustomFiles(fs, def.customFiles);
+//         break;
 
-      case FileSystemMode.GeneratedWithCustom:
-        // Keep generated files, add custom ones
-        AddCustomFiles(fs, def.customFiles);
-        break;
-    }
+//       case FileSystemMode.GeneratedWithCustom:
+//         // Keep generated files, add custom ones
+//         // AddCustomFiles(fs, def.customFiles);
+//         break;
+//     }
 
-    return Result<bool>.Success(true);
-  }
+//     return Result<bool>.Success(true);
+//   }
 
-  private void AddCustomFiles(VirtualFileSystem fs, List<FileDefinition> files)
-  {
-    foreach (var fileDef in files)
-    {
-      // Ensure parent directories exist
-      var dirPath = System.IO.Path.GetDirectoryName(fileDef.path);
-      fs.CreateDirectory(dirPath);
+//   private void AddCustomFiles(VirtualFileSystem fs, List<FileDefinition> files)
+//   {
+//     foreach (var fileDef in files)
+//     {
+//       // Ensure parent directories exist
+//       var dirPath = System.IO.Path.GetDirectoryName(fileDef.path);
+//       fs.CreateDirectory(dirPath);
 
-      // Get content from text asset if specified, otherwise use inline content
-      var content = !string.IsNullOrEmpty(fileDef.contentFromTextAsset)
-          ? fileDef.contentFromTextAsset
-          : fileDef.content;
+//       // Get content from text asset if specified, otherwise use inline content
+//       var content = !string.IsNullOrEmpty(fileDef.contentFromTextAsset)
+//           ? fileDef.contentFromTextAsset
+//           : fileDef.content;
 
-      // Create the file
-      fs.CreateFile(fileDef.path, content);
+//       // Create the file
+//       fs.CreateFile(fileDef.path, content);
 
-      // Set permissions (you may need to add this to VirtualFileSystem)
-      // fs.SetPermissions(fileDef.path, fileDef.permissions);
-    }
-  }
-}
+//       // Set permissions (you may need to add this to VirtualFileSystem)
+//       // fs.SetPermissions(fileDef.path, fileDef.permissions);
+//     }
+//   }
+// }

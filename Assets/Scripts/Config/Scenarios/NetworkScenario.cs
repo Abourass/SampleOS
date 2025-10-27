@@ -17,7 +17,7 @@ public class NetworkScenario : ScriptableObject
   public NetworkDefinition network;
 
   [Header("Devices")]
-  public List<DeviceDefinition> devices = new List<DeviceDefinition>();
+  public List<ScenarioDeviceConfig> devices = new List<ScenarioDeviceConfig>();
 
   public enum DifficultyLevel
   {
@@ -48,7 +48,7 @@ public class NetworkDefinition
 }
 
 [System.Serializable]
-public class DeviceDefinition
+public class ScenarioDeviceConfig
 {
   [Header("Device Identity")]
   public string deviceName;

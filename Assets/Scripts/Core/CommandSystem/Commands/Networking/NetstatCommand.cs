@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using SampleOS.Core.Networking;
+using UnityEngine;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
@@ -11,10 +14,17 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
         public override CommandResult Execute(string[] args, CommandContext context)
         {
-            if (context.Network == null)
+            // Validate service availability
+            if (context.CurrentNetwork == null)
             {
                 WriteError(context, "Network not available");
                 return CommandResult.Error("Network not available");
+            }
+
+            if (context.CurrentDevice == null)
+            {
+                WriteError(context, "Device context not available");
+                return CommandResult.Error("Device not available");
             }
 
             // Parse options
@@ -96,11 +106,14 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         private void DisplayNetworkDevices(CommandContext context)
         {
             // Display a header
+            context.Stdout.SetColor(new Color(0.3f, 0.7f, 1f));
             WriteOutput(context, "NETWORK DEVICES");
             WriteOutput(context, "===============");
+            context.Stdout.SetColor(Color.white);
 
-            // Get devices from the network
-            var devices = context.Network.GetNetworkDevices();
+            // Get devices from the current network via NetworkService
+            var networkId = context.CurrentNetwork.NetworkId;
+            var devices = context.NetworkService.GetDevicesInNetwork(networkId);
 
             if (devices.Count == 0)
             {
@@ -123,25 +136,46 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                 string ipAddress = device.IPAddress ?? "N/A";
                 ipAddress = ipAddress.PadRight(18).Substring(0, 18);
 
-                string status = "online";
-                string type = device.Type ?? "unknown";
+                string status = device.IsOnline ? "online" : "offline";
+                string type = device.DeviceType?.Name ?? "unknown";
 
-                table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type}");
+                // Highlight compromised devices
+                if (context.PlayerState.HasCompromisedSystem(device.Hostname))
+                {
+                    context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+                    table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type} [OWNED]");
+                    context.Stdout.SetColor(Color.white);
+                }
+                else
+                {
+                    table.AppendLine($"{hostname} {ipAddress} {status.PadRight(9)} {type}");
+                }
             }
 
             WriteOutput(context, table.ToString().TrimEnd());
+            WriteOutput(context, "");
+            WriteOutput(context, $"Total devices: {devices.Count}");
         }
 
         private void DisplayConnections(CommandContext context, bool numericOnly, bool tcpOnly, bool listeningOnly)
         {
+            context.Stdout.SetColor(new Color(0.3f, 0.7f, 1f));
             WriteOutput(context, "ACTIVE CONNECTIONS");
             WriteOutput(context, "==================");
+            context.Stdout.SetColor(Color.white);
 
-            // Get connections
+            // Get connections from current device and player state
             var connections = GetConnections(context, listeningOnly);
 
+            if (connections.Count == 0)
+            {
+                WriteOutput(context, "No active connections.");
+                return;
+            }
+
             // Display header
-            WriteOutput(context, "Proto Recv-Q Send-Q Local Address           Foreign Address         State");
+            WriteOutput(context, "Proto Recv-Q Send-Q Local Address           Foreign Address         State       Process");
+            WriteOutput(context, "----------------------------------------------------------------------------------------------------");
 
             // Display connections
             foreach (var conn in connections)
@@ -149,78 +183,106 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                 if (tcpOnly && conn.Protocol != "tcp")
                     continue;
 
-                string localAddr = numericOnly ? conn.LocalAddress : ResolveAddress(conn.LocalAddress);
-                string foreignAddr = numericOnly ? conn.ForeignAddress : ResolveAddress(conn.ForeignAddress);
+                string localAddr = numericOnly ? conn.LocalAddress : ResolveAddress(conn.LocalAddress, context);
+                string foreignAddr = numericOnly ? conn.ForeignAddress : ResolveAddress(conn.ForeignAddress, context);
 
-                string line = string.Format("{0,-5} {1,6} {2,6} {3,-23} {4,-23} {5}",
+                string line = string.Format("{0,-5} {1,6} {2,6} {3,-23} {4,-23} {5,-11} {6}",
                     conn.Protocol,
                     conn.RecvQueue,
                     conn.SendQueue,
                     localAddr,
                     foreignAddr,
-                    conn.State);
+                    conn.State,
+                    conn.Process);
+
+                // Color code by state
+                if (conn.State == "ESTABLISHED")
+                {
+                    context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f)); // Green
+                }
+                else if (conn.State == "LISTEN")
+                {
+                    context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
+                }
 
                 WriteOutput(context, line);
+                context.Stdout.SetColor(Color.white);
             }
+
+            WriteOutput(context, "");
+            WriteOutput(context, $"Total connections: {connections.Count}");
         }
 
         private List<NetworkConnection> GetConnections(CommandContext context, bool listeningOnly)
         {
             var connections = new List<NetworkConnection>();
+            var currentDevice = context.CurrentDevice;
+            string localIP = currentDevice.IPAddress ?? "127.0.0.1";
 
-            // Get local system
-            var localSystem = context.CurrentSystem ?? context.Network.GetLocalSystem();
-            string localIP = localSystem?.IPAddress ?? "127.0.0.1";
-
-            // Add listening services
-            if (localSystem != null)
+            // 1. Add listening services from installed software
+            if (currentDevice.InstalledSoftware != null)
             {
-                foreach (var port in localSystem.GetOpenPorts())
+                foreach (var software in currentDevice.InstalledSoftware)
                 {
-                    var software = localSystem.GetSoftwareOnPort(port);
-                    connections.Add(new NetworkConnection
+                    if (software.IsRunning && software.ListeningPorts != null)
                     {
-                        Protocol = "tcp",
-                        LocalAddress = $"{localIP}:{port}",
-                        ForeignAddress = "0.0.0.0:*",
-                        State = "LISTEN",
-                        RecvQueue = 0,
-                        SendQueue = 0,
-                        Process = software?.Name ?? "unknown"
-                    });
+                        foreach (var port in software.ListeningPorts)
+                        {
+                            connections.Add(new NetworkConnection
+                            {
+                                Protocol = "tcp",
+                                LocalAddress = $"{localIP}:{port}",
+                                ForeignAddress = "0.0.0.0:*",
+                                State = "LISTEN",
+                                RecvQueue = 0,
+                                SendQueue = 0,
+                                Process = software.Name
+                            });
+                        }
+                    }
                 }
             }
 
-            // Add established connections if not listening-only
-            if (!listeningOnly)
+            // Don't show established connections if listening-only flag is set
+            if (listeningOnly)
+                return connections;
+
+            // 2. Show active SSH connections (from HackingSession)
+            var activeConnections = context.HackingSession.ActiveConnections;
+            if (activeConnections != null && activeConnections.Count > 0)
             {
-                // Check if connected to any systems via SSH
-                if (context.CurrentSystem != null && context.CurrentSystem != context.Network.GetLocalSystem())
+                foreach (var remoteConn in activeConnections)
                 {
+                    // Outbound connection
                     connections.Add(new NetworkConnection
                     {
                         Protocol = "tcp",
-                        LocalAddress = $"{localIP}:56789",
-                        ForeignAddress = $"{context.CurrentSystem.IPAddress}:22",
+                        LocalAddress = $"{localIP}:{UnityEngine.Random.Range(50000, 60000)}", // Ephemeral port
+                        ForeignAddress = $"{remoteConn.TargetDevice.IPAddress}:22",
                         State = "ESTABLISHED",
                         RecvQueue = 0,
                         SendQueue = 0,
                         Process = "ssh"
                     });
                 }
+            }
 
-                // Add some typical background connections
+            // 3. Show connections to other devices on the network (simulated background traffic)
+            if (currentDevice.IsOnline)
+            {
+                // DNS lookups
                 connections.Add(new NetworkConnection
                 {
-                    Protocol = "tcp",
-                    LocalAddress = $"{localIP}:45123",
+                    Protocol = "udp",
+                    LocalAddress = $"{localIP}:{UnityEngine.Random.Range(50000, 60000)}",
                     ForeignAddress = "8.8.8.8:53",
-                    State = "ESTABLISHED",
+                    State = "",
                     RecvQueue = 0,
                     SendQueue = 0,
                     Process = "systemd-resolve"
                 });
 
+                // DHCP client
                 connections.Add(new NetworkConnection
                 {
                     Protocol = "udp",
@@ -231,20 +293,54 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
                     SendQueue = 0,
                     Process = "dhclient"
                 });
+
+                // Random background connection (if device has internet access)
+                var network = context.CurrentNetwork;
+                if (network?.Metadata.Type == NetworkType.Corporate ||
+                    network?.Metadata.Type == NetworkType.ISP)
+                {
+                    connections.Add(new NetworkConnection
+                    {
+                        Protocol = "tcp",
+                        LocalAddress = $"{localIP}:{UnityEngine.Random.Range(50000, 60000)}",
+                        ForeignAddress = $"{UnityEngine.Random.Range(1, 255)}.{UnityEngine.Random.Range(1, 255)}.{UnityEngine.Random.Range(1, 255)}.{UnityEngine.Random.Range(1, 255)}:443",
+                        State = "ESTABLISHED",
+                        RecvQueue = 0,
+                        SendQueue = 0,
+                        Process = "firefox"
+                    });
+                }
             }
 
             return connections;
         }
 
-        private string ResolveAddress(string address)
+        private string ResolveAddress(string address, CommandContext context)
         {
-            // Simple hostname resolution
+            // Simple hostname resolution using NetworkService
             if (address.Contains("127.0.0.1"))
                 return address.Replace("127.0.0.1", "localhost");
+
             if (address.Contains("0.0.0.0"))
                 return address;
 
-            // Could expand this to resolve other known hosts
+            // Try to resolve IP to hostname
+            var parts = address.Split(':');
+            if (parts.Length >= 1)
+            {
+                string ip = parts[0];
+                var network = context.CurrentNetwork;
+
+                if (network != null)
+                {
+                    var device = network.GetDeviceByIP(ip);
+                    if (device != null)
+                    {
+                        return address.Replace(ip, device.Hostname);
+                    }
+                }
+            }
+
             return address;
         }
 

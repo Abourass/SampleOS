@@ -1,18 +1,17 @@
 using UnityEngine;
+using SampleOS.Core.Devices;
 
 namespace SampleOS.Core.CommandSystem.Commands.Networking
 {
   public class SshCommand : CommandBase
   {
-    private CommandProcessor processor;
-
     public override string Name => "ssh";
     public override string Description => "Connect to remote systems via SSH";
     public override string Usage => "ssh [user@]hostname [-p password]";
 
-    public SshCommand(CommandProcessor processor)
+    // No constructor dependencies!
+    public SshCommand()
     {
-      this.processor = processor;
     }
 
     public override CommandResult Execute(string[] args, CommandContext context)
@@ -50,18 +49,98 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         }
       }
 
-      // Try to connect
-      var system = context.Network?.GetSystemByHostname(hostname);
-      if (system == null)
+      // Find the target device using WorldService
+      var currentCity = context.WorldService.GetCurrentCity();
+      if (currentCity == null)
+      {
+        WriteError(context, "Error: No city context available");
+        return CommandResult.Error("No city");
+      }
+
+      // Search current network first
+      var network = currentCity.CurrentNetwork;
+      Device device = network.GetDeviceByHostname(hostname) ?? network.GetDeviceByIP(hostname);
+
+      // If not found in current network, search other connected networks
+      if (device == null)
+      {
+        var connectionManager = currentCity.GetConnectionManager();
+        var activeConnections = connectionManager.GetActiveConnections();
+
+        foreach (var conn in activeConnections)
+        {
+          if (conn.TargetNetworkId != network.NetworkId)
+          {
+            // Try to find device in connected network
+            var cityResult = currentCity.GetNetworkInfo(conn.TargetNetworkId);
+            if (cityResult.IsSuccess)
+            {
+              // This is a simplified lookup - you'd need to actually get the network
+              // For now, we'll just show a hint
+            }
+          }
+        }
+      }
+
+      if (device == null)
       {
         WriteError(context, $"ssh: Could not resolve hostname {hostname}");
+        WriteOutput(context, "");
+        WriteOutput(context, "Hints:");
+        WriteOutput(context, "  - Use 'nmap <ip-range>' to discover devices on the current network");
+        WriteOutput(context, "  - Check if you're connected to the correct network with 'networks'");
+        WriteOutput(context, "  - Use 'vpn-connect' if the device is on a different network");
         return CommandResult.Error("Host not found");
       }
 
-      // Use default username if not specified
+      // Check if device is online
+      if (!device.IsOnline)
+      {
+        WriteError(context, $"ssh: {hostname} is offline or unreachable");
+        return CommandResult.Error("Host offline");
+      }
+
+      // Check if SSH is available on this device
+      var availableMethods = device.GetAvailableInteractionMethods();
+      if (!availableMethods.Contains("ssh"))
+      {
+        WriteError(context, $"ssh: {hostname} does not support SSH connections");
+        WriteOutput(context, $"Available methods: {string.Join(", ", availableMethods)}");
+        return CommandResult.Error("SSH not available");
+      }
+
+      // Check for open SSH port (port 22)
+      var sshSoftware = device.InstalledSoftware.Find(s =>
+        s.Name.ToLower().Contains("ssh") || s.ListeningPorts.Contains(22));
+
+      if (sshSoftware == null || !sshSoftware.ListeningPorts.Contains(22))
+      {
+        WriteError(context, $"ssh: connect to host {hostname} port 22: Connection refused");
+        WriteOutput(context, "");
+        WriteOutput(context, "Hints:");
+        WriteOutput(context, "  - The SSH service may not be running");
+        WriteOutput(context, "  - Use 'nmap <ip>' to check which ports are open");
+        return CommandResult.Error("SSH port closed");
+      }
+
+      // Determine username if not specified
       if (string.IsNullOrEmpty(username))
       {
-        username = system.Username;
+        // Check if player has saved credentials for this host
+        if (context.PlayerState.HasCredentialsFor(hostname))
+        {
+          var savedCreds = context.PlayerState.GetCredentialsFor(hostname);
+          username = savedCreds.username;
+          password = savedCreds.password;
+          WriteOutput(context, $"Using saved credentials for {hostname}");
+        }
+        else
+        {
+          // Try to find default username from device credentials
+          var defaultCred = device.Credentials.Find(c => c.IsDefault);
+          username = defaultCred?.Username ?? "user";
+        }
+
         WriteOutput(context, $"Connecting to {hostname} as {username}...");
       }
       else
@@ -72,51 +151,103 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       // Simulate connection delay
       System.Threading.Thread.Sleep(500);
 
-      // Check for SSH port
-      if (!system.GetOpenPorts().Contains(22))
+      // Try authentication
+      if (!device.Authenticate(username, password))
       {
-        WriteError(context, $"ssh: connect to host {hostname} port 22: Connection refused");
-        return CommandResult.Error("SSH port closed");
+        WriteError(context, $"{username}@{hostname}: Permission denied (publickey,password).");
+        WriteOutput(context, "");
+        WriteOutput(context, "Hints:");
+        WriteOutput(context, "  - Try different usernames (admin, root, user)");
+        WriteOutput(context, "  - Use credentials found in compromised systems");
+        WriteOutput(context, "  - Check your credential database with 'creds list'");
+        WriteOutput(context, "  - Use 'vulnscan' and 'exploit' to gain access");
+        return CommandResult.Error("Authentication failed");
       }
 
-      // Try authentication
-      if (system.Authenticate(username, password))
+      // Store successful credentials
+      if (!string.IsNullOrEmpty(password))
       {
-        // Connection successful
-        context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
-        WriteOutput(context, $"Successfully connected to {hostname}");
+        context.PlayerState.StoreCredentials(hostname, username, password);
+      }
+
+      // Connection successful - use PlayerStateService to connect
+      var connectionResult = context.PlayerState.ConnectToDevice(device, username, password);
+      if (connectionResult.IsFailure)
+      {
+        WriteError(context, $"Failed to establish connection: {connectionResult.ErrorMessage}");
+        return CommandResult.Error("Connection failed");
+      }
+
+      context.Stdout.SetColor(new Color(0.3f, 1f, 0.3f));
+      WriteOutput(context, $"✓ Successfully connected to {hostname}");
+      context.Stdout.SetColor(Color.white);
+      WriteOutput(context, "");
+
+      // Show welcome message
+      WriteOutput(context, $"Welcome to {device.Hostname}");
+      WriteOutput(context, $"Type: {device.DeviceType.Name}");
+      WriteOutput(context, $"OS: {DetermineOSType(device)}");
+      WriteOutput(context, "");
+
+      // Check access level and show warnings
+      var hasRootCred = device.Credentials.Exists(c =>
+        c.Username == "root" && c.Username == username);
+
+      if (hasRootCred)
+      {
+        context.Stdout.SetColor(new Color(1f, 0.3f, 0.3f));
+        WriteOutput(context, "# ROOT ACCESS GRANTED #");
         context.Stdout.SetColor(Color.white);
         WriteOutput(context, "");
 
-        // Switch context
-        processor.SetCurrentSystem(system);
-        processor.SetFileSystem(system.FileSystem);
-
-        // Show welcome message
-        WriteOutput(context, $"Welcome to {system.Name}");
-        WriteOutput(context, $"Type: {system.Type}");
-        WriteOutput(context, "");
-
-        // Check permissions
-        if (system.HasRootAccess)
-        {
-          context.Stdout.SetColor(new Color(1f, 0.3f, 0.3f));
-          WriteOutput(context, "# ROOT ACCESS GRANTED #");
-          context.Stdout.SetColor(Color.white);
-          WriteOutput(context, "");
-        }
-        else if (!system.HasPermission("/root"))
-        {
-          WriteOutput(context, "Limited access - explore and escalate privileges.");
-          WriteOutput(context, "");
-        }
-
-        return CommandResult.Ok();
+        // Record root compromise
+        context.PlayerState.RecordSystemCompromise(device, "SSH", true);
       }
       else
       {
-        WriteError(context, $"{username}@{hostname}: Permission denied (publickey,password).");
-        return CommandResult.Error("Authentication failed");
+        WriteOutput(context, "Limited access - explore and escalate privileges.");
+        WriteOutput(context, "");
+        WriteOutput(context, "Hints:");
+        WriteOutput(context, "  - Use 'vulnscan' to find exploitable vulnerabilities");
+        WriteOutput(context, "  - Check for sensitive files with 'find' and 'grep'");
+        WriteOutput(context, "  - Look for credentials in user home directories");
+        WriteOutput(context, "");
+
+        // Record user-level compromise
+        context.PlayerState.RecordSystemCompromise(device, "SSH", false);
+      }
+
+      // Show security warnings if device has high security
+      if (device.SecurityLevel == SampleOS.Core.Networking.SecurityLevel.High)
+      {
+        context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f));
+        WriteOutput(context, "⚠ Warning: This system has enhanced security monitoring");
+        context.Stdout.SetColor(Color.white);
+        WriteOutput(context, "");
+      }
+
+      return CommandResult.Ok();
+    }
+
+    private string DetermineOSType(Device device)
+    {
+      // Determine OS based on device category
+      switch (device.DeviceType.Category)
+      {
+        case DeviceCategory.Workstation:
+        case DeviceCategory.Server:
+          return "Linux";
+        case DeviceCategory.Router:
+          return "RouterOS";
+        case DeviceCategory.IoTDevice:
+        case DeviceCategory.EmbeddedSystem:
+          return "Embedded Linux";
+        case DeviceCategory.MobileDevice:
+          return "Android";
+        case DeviceCategory.IndustrialControl:
+          return "Industrial Control System";
+        default:
+          return "Unix-like";
       }
     }
   }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,29 +10,21 @@ using SampleOS.Core.CommandSystem.Commands.CLI;
 using SampleOS.Core.CommandSystem.Commands.Systems;
 using SampleOS.Core.CommandSystem.Commands.Networking;
 using SampleOS.Core.CommandSystem.Commands.Vulnerabilities;
-using System;
-using SampleOS.Core.FileSystem;
+using SampleOS.Core.Services;
 
 namespace SampleOS.Core.CommandSystem
 {
     public class CommandProcessor : MonoBehaviour
     {
-        private Dictionary<string, ICommand> commands = new Dictionary<string, ICommand>();
-        private Dictionary<string, string> aliases = new Dictionary<string, string>();
+        private Dictionary<string, ICommand> commands = new();
+        private Dictionary<string, string> aliases = new();
 
-        private VirtualFileSystem fileSystem;
-        private VirtualNetwork network;
-        private RemoteSystem currentSystem;
-        private CommandEnvironment environment;
+        private IPlayerStateService playerState;
+        private IHackingSessionService hackingSession;
+        private IWorldService worldService;
 
         private IInteractiveCommand interactiveCommand;
         private CancellationTokenSource cancellationSource;
-
-        // Dependencies
-        private PlayerVulnerabilityInventory vulnerabilityInventory;
-        private PlayerProgressManager progressManager;
-        private VirtualCity city;
-        private PlayerCredentialManager credentialManager;
 
         public bool IsWaitingForInput => interactiveCommand?.IsWaitingForInput ?? false;
         public bool IsExecuting => cancellationSource != null;
@@ -44,14 +37,16 @@ namespace SampleOS.Core.CommandSystem
 
         private void Initialize()
         {
-            // Initialize resources
-            fileSystem = new VirtualFileSystem();
-            city = new VirtualCity();
-            network = city.CurrentNetwork;
-            environment = new CommandEnvironment();
-            credentialManager = new PlayerCredentialManager();
-            vulnerabilityInventory = new PlayerVulnerabilityInventory();
-            progressManager = new PlayerProgressManager(network);
+            // Get services instead of creating state
+            playerState = ServiceLocator.Instance.Get<IPlayerStateService>();
+            hackingSession = ServiceLocator.Instance.Get<IHackingSessionService>();
+            worldService = ServiceLocator.Instance.Get<IWorldService>();
+
+            if (playerState == null || hackingSession == null || worldService == null)
+            {
+                Debug.LogError("Required services not initialized!");
+                return;
+            }
 
             // Register commands
             RegisterCommands();
@@ -64,7 +59,7 @@ namespace SampleOS.Core.CommandSystem
             Register(new ClearCommand());
             Register(new HelpCommand(commands));
             Register(new PsCommand(this));
-            Register(new QuitCommand(progressManager));
+            Register(new QuitCommand());
 
             // File Operations
             Register(new CatCommand());
@@ -80,16 +75,16 @@ namespace SampleOS.Core.CommandSystem
 
             // Networking
             Register(new NetstatCommand());
-            Register(new NetworksCommand(city));
-            Register(new SshCommand(this));
+            Register(new NetworksCommand());
+            Register(new SshCommand());
             Register(new NmapCommand());
-            Register(new OwnedCommand(progressManager));
-            Register(new VpnConnectCommand(city, credentialManager, this));
+            Register(new OwnedCommand());
+            Register(new VpnConnectCommand());
 
             // Vulnerabilities
-            Register(new ExploitCommand(this, vulnerabilityInventory, progressManager));
-            Register(new VulnScanCommand(vulnerabilityInventory));
-            Register(new VulnsCommand(vulnerabilityInventory));
+            Register(new ExploitCommand());
+            Register(new VulnScanCommand());
+            Register(new VulnsCommand());
         }
 
         private void Register(ICommand command)
@@ -153,12 +148,14 @@ namespace SampleOS.Core.CommandSystem
             CancellationToken cancellationToken = default)
         {
             return new CommandContext(
-                stdout, stderr,
-                fileSystem, network, currentSystem,
+                stdout,
+                stderr,
                 cancellationToken,
                 new Progress<CommandProgress>(p =>
                     Debug.Log($"Progress: {p.Percentage:P0} - {p.Message}")),
-                null, false, environment
+                null, // pipedInput
+                false, // isInteractive
+                null // environment (uses default)
             );
         }
 
@@ -299,9 +296,14 @@ namespace SampleOS.Core.CommandSystem
                     try
                     {
                         var linkedContext = new CommandContext(
-                            context.Stdout, context.Stderr, context.FileSystem, context.Network,
-                            context.CurrentSystem, cancellationSource.Token, context.Progress,
-                            context.PipedInput, context.IsInteractive, context.Environment);
+                            context.Stdout,
+                            context.Stderr,
+                            cancellationSource.Token,
+                            context.Progress,
+                            context.PipedInput,
+                            context.IsInteractive,
+                            context.Environment
+                        );
 
                         return await asyncCommand.ExecuteAsync(args, linkedContext);
                     }
@@ -435,12 +437,7 @@ namespace SampleOS.Core.CommandSystem
         {
             cancellationSource?.Cancel();
         }
-
-        public string GetCurrentPath() => fileSystem.CurrentPath;
-        public VirtualFileSystem GetFileSystem() => fileSystem;
-        public RemoteSystem GetCurrentSystem() => currentSystem;
-        public void SetCurrentSystem(RemoteSystem system) => currentSystem = system;
-        public void SetFileSystem(VirtualFileSystem fs) => fileSystem = fs;
-        public void UpdateCurrentNetwork() => network = city.CurrentNetwork;
     }
 }
+
+

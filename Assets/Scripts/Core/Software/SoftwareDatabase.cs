@@ -156,5 +156,44 @@ namespace SampleOS.Core.SoftwarePackages
 
             return software;
         }
+
+        public Software GetSoftware(string softwareId)
+        {
+            // Parse softwareId format: "category:name" or "category:name:version"
+            var parts = softwareId.Split(':');
+            if (parts.Length < 2)
+                return null;
+
+            string category = parts[0];
+            string name = parts[1];
+            string version = parts.Length > 2 ? parts[2] : null;
+
+            if (!softwareByCategory.TryGetValue(category, out List<SoftwareTemplate> templates))
+                return null;
+
+            // Find the software by name
+            var template = templates.Find(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (template == null)
+                return null;
+
+            // Use provided version or default to old version
+            string softwareVersion = version ?? template.OldVersion;
+
+            // Create the software instance
+            var software = new Software(
+                template.Name,
+                softwareVersion,
+                category,
+                DateTime.Now.AddYears(-2) // Default to 2 years old
+            );
+
+            // Add default ports
+            foreach (int port in template.DefaultPorts)
+            {
+                software.AddPort(port);
+            }
+
+            return software;
+        }
     }
 }

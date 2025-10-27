@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
+using SampleOS.Core.Devices;
 using SampleOS.Core.FileSystem;
+using SampleOS.Core.Networking;
+using SampleOS.Core.Services;
 using SampleOS.Core.Terminal;
 
 namespace SampleOS.Core.CommandSystem
@@ -10,30 +14,51 @@ namespace SampleOS.Core.CommandSystem
     /// </summary>
     public class CommandContext
     {
-        // Streams
+        // I/O Streams
         public ITerminalStream Stdout { get; }
         public ITerminalStream Stderr { get; }
 
-        // Resources
-        public VirtualFileSystem FileSystem { get; }
-        public VirtualNetwork Network { get; }
-        public RemoteSystem CurrentSystem { get; }
-
-        // State
+        // Execution Control
         public CancellationToken CancellationToken { get; }
         public IProgress<CommandProgress> Progress { get; }
+
+        // Piping
         public string PipedInput { get; }
+        public bool HasPipedInput => !string.IsNullOrEmpty(PipedInput);
+
+        // Interactive Mode
         public bool IsInteractive { get; }
 
         // Environment
         public CommandEnvironment Environment { get; }
 
+        // Convenience accessors to services (lazy loaded)
+        private IPlayerStateService _playerState;
+        private IHackingSessionService _hackingSession;
+        private IWorldService _worldService;
+        private INetworkService _networkService;
+
+        public IPlayerStateService PlayerState =>
+            _playerState ??= ServiceLocator.Instance.Get<IPlayerStateService>();
+
+        public IHackingSessionService HackingSession =>
+            _hackingSession ??= ServiceLocator.Instance.Get<IHackingSessionService>();
+
+        public IWorldService WorldService =>
+            _worldService ??= ServiceLocator.Instance.Get<IWorldService>();
+
+        public INetworkService NetworkService =>
+            _networkService ??= ServiceLocator.Instance.Get<INetworkService>();
+
+        // Convenience accessors (delegate to services)
+        public Device CurrentDevice => HackingSession?.CurrentDevice;
+        public VirtualFileSystem FileSystem => CurrentDevice?.FileSystem;
+        public VirtualNetwork CurrentNetwork => WorldService?.GetCurrentCity()?.CurrentNetwork;
+        public bool IsRemoteSession => HackingSession?.IsOnRemoteDevice ?? false;
+
         public CommandContext(
             ITerminalStream stdout,
             ITerminalStream stderr,
-            VirtualFileSystem fileSystem,
-            VirtualNetwork network,
-            RemoteSystem currentSystem = null,
             CancellationToken cancellationToken = default,
             IProgress<CommandProgress> progress = null,
             string pipedInput = null,
@@ -42,9 +67,6 @@ namespace SampleOS.Core.CommandSystem
         {
             Stdout = stdout;
             Stderr = stderr;
-            FileSystem = fileSystem;
-            Network = network;
-            CurrentSystem = currentSystem;
             CancellationToken = cancellationToken;
             Progress = progress ?? new Progress<CommandProgress>();
             PipedInput = pipedInput;
@@ -58,8 +80,8 @@ namespace SampleOS.Core.CommandSystem
         public CommandContext WithPipedInput(string input)
         {
             return new CommandContext(
-                Stdout, Stderr, FileSystem, Network, CurrentSystem,
-                CancellationToken, Progress, input, IsInteractive, Environment);
+                Stdout, Stderr, CancellationToken, Progress,
+                input, IsInteractive, Environment);
         }
 
         /// <summary>
@@ -69,11 +91,11 @@ namespace SampleOS.Core.CommandSystem
         {
             var stdoutBuffer = new BufferedStream();
             var stderrBuffer = new BufferedStream();
-            
+
             var context = new CommandContext(
-                stdoutBuffer, stderrBuffer, FileSystem, Network, CurrentSystem,
-                CancellationToken, Progress, PipedInput, IsInteractive, Environment);
-            
+                stdoutBuffer, stderrBuffer, CancellationToken, Progress,
+                PipedInput, IsInteractive, Environment);
+
             return (context, stdoutBuffer, stderrBuffer);
         }
     }
@@ -83,8 +105,8 @@ namespace SampleOS.Core.CommandSystem
     /// </summary>
     public class CommandEnvironment
     {
-        private readonly System.Collections.Generic.Dictionary<string, string> variables 
-            = new System.Collections.Generic.Dictionary<string, string>();
+        private readonly Dictionary<string, string> variables
+            = new Dictionary<string, string>();
 
         public string Get(string key, string defaultValue = "")
         {
@@ -99,6 +121,11 @@ namespace SampleOS.Core.CommandSystem
         public bool Has(string key)
         {
             return variables.ContainsKey(key);
+        }
+
+        public Dictionary<string, string> GetAll()
+        {
+            return new Dictionary<string, string>(variables);
         }
     }
 

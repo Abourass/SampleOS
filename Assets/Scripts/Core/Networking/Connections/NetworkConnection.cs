@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Core.Networking.Connections
+namespace SampleOS.Core.Networking.Connections
 {
   [Serializable]
   public class NetworkConnection

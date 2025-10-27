@@ -53,6 +53,17 @@ public class TerminalOutputHandler : ITerminalOutput
   }
 
   /// <summary>
+  /// Appends colored text to the terminal
+  /// </summary>
+  public void AppendColoredText(string text, Color color)
+  {
+    var previousColor = currentColor;
+    SetColor(color);
+    AppendText(text);
+    SetColor(previousColor);
+  }
+
+  /// <summary>
   /// Displays a welcome message when the terminal starts
   /// </summary>
   public void DisplayWelcomeMessage(string welcomeMessage)
@@ -62,9 +73,25 @@ public class TerminalOutputHandler : ITerminalOutput
   }
 
   /// <summary>
-  /// Displays the command prompt with the current path
+  /// Displays the command prompt with the current path (local device)
   /// </summary>
   public void DisplayPrompt(string path)
+  {
+    DisplayPromptInternal(path, false, null);
+  }
+
+  /// <summary>
+  /// Displays the command prompt for a remote device
+  /// </summary>
+  public void DisplayRemotePrompt(string hostname, string path)
+  {
+    DisplayPromptInternal(path, true, hostname);
+  }
+
+  /// <summary>
+  /// Internal method to display prompts (local or remote)
+  /// </summary>
+  private void DisplayPromptInternal(string path, bool isRemote, string hostname)
   {
     if (promptConfig != null && promptConfig.enablePowerline)
     {
@@ -85,8 +112,19 @@ public class TerminalOutputHandler : ITerminalOutput
       // Add user badge if enabled
       if (promptConfig.showUserBadge)
       {
+        string userDisplay = isRemote
+            ? $"user@{hostname}"
+            : System.Environment.UserName;
+
+        Color userBgColor = isRemote
+            ? promptConfig.remoteUserColor
+            : new Color(0.3f, 0.6f, 0.3f); // Default green
+
         powerline.AddBadge(
-            PowerlinePrompt.CreateUserBadge(System.Environment.UserName)
+            userDisplay,
+            userBgColor,
+            Color.white,
+            PowerlineBadge.ICON_USER
         );
       }
 
@@ -97,17 +135,22 @@ public class TerminalOutputHandler : ITerminalOutput
         string dirName = System.IO.Path.GetFileName(path);
         if (string.IsNullOrEmpty(dirName)) dirName = path;
 
+        Color dirBgColor = isRemote
+            ? promptConfig.remotePathColor
+            : new Color(0.2f, 0.4f, 0.6f); // Default blue
+
         powerline.AddBadge(
-            PowerlinePrompt.CreateDirectoryBadge(dirName)
+            dirName,
+            dirBgColor,
+            Color.white,
+            PowerlineBadge.ICON_FOLDER
         );
       }
 
       // Add time badge if enabled
       if (promptConfig.showTimeBadge)
       {
-        powerline.AddBadge(
-            PowerlinePrompt.CreateTimeBadge()
-        );
+        powerline.AddBadge(PowerlinePrompt.CreateTimeBadge());
       }
 
       // Generate and display the prompt
@@ -117,7 +160,15 @@ public class TerminalOutputHandler : ITerminalOutput
     else
     {
       // Fall back to the simple prompt style
-      AppendText($"{path}{DEFAULT_PROMPT}");
+      if (isRemote)
+      {
+        AppendColoredText($"user@{hostname}", new Color(0.3f, 1f, 0.3f));
+        AppendText($":{path}{DEFAULT_PROMPT}");
+      }
+      else
+      {
+        AppendText($"{path}{DEFAULT_PROMPT}");
+      }
     }
   }
 

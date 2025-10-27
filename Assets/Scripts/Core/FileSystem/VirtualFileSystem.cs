@@ -17,22 +17,32 @@ namespace SampleOS.Core.FileSystem
 
     public string CurrentPath { get; private set; }
 
-    public VirtualFileSystem()
+    public VirtualFileSystem(bool autoInitialize = false)
     {
-      Initialize();
+      // Create root directory
+      root = new VirtualNode("/", true);
+      currentNode = root;
+      CurrentPath = "/";
+
+      // Only auto-initialize if requested (for backward compatibility)
+      if (autoInitialize)
+      {
+        Initialize();
+      }
     }
 
     private void Initialize()
     {
-      // Create root directory
-      root = new VirtualNode("/", true);
-
       // Build default directory structure
-      FileSystemFactory.BuildDefaultFileSystem(root);
+      FileSystemFactory.CreateDefault();
 
-      // Set current directory
-      currentNode = root.FindNode("/home/user");
-      CurrentPath = "/home/user";
+      // Set current directory to /home/user if it exists
+      var userHome = root.FindNode("/home/user");
+      if (userHome != null)
+      {
+        currentNode = userHome;
+        CurrentPath = "/home/user";
+      }
     }
 
     public Result<List<VirtualNode>> ListDirectory(string path)
@@ -196,6 +206,11 @@ namespace SampleOS.Core.FileSystem
       return Result<bool>.Success(true);
     }
 
+    public VirtualNode GetRoot()
+    {
+      return root;
+    }
+
     /// <summary>
     /// Finds files and directories that match the specified glob pattern
     /// </summary>
@@ -249,6 +264,15 @@ namespace SampleOS.Core.FileSystem
       var files = allMatchesResult.Data.Where(node => !node.IsDirectory).ToList();
 
       return Result<List<VirtualNode>>.Success(files);
+    }
+
+    public void Clear()
+    {
+      // Clear all nodes except root
+      root.Children.Clear();
+      root = new VirtualNode("/", true);
+      currentNode = root;
+
     }
 
     /// <summary>

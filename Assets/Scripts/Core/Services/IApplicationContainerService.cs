@@ -1,3 +1,4 @@
+using SampleOS.Core.Apps;
 using SampleOS.Core.Devices;
 
 namespace SampleOS.Core.Services
@@ -6,7 +7,7 @@ namespace SampleOS.Core.Services
     /// Service interface for managing interactive application instances.
     /// Handles launching, closing, and tracking running apps.
     /// </summary>
-    public interface IApplicationContainerService : IGameService
+    public interface IApplicationContainerService
     {
         /// <summary>
         /// Launch an application on a specific device

@@ -28,7 +28,6 @@ namespace SampleOS.Core.Terminal
 
         // Service references
         private IPlayerStateService playerState;
-        private IHackingSessionService hackingSession;
         private IWorldService worldService;
 
         // Current device context (cached from services)
@@ -58,7 +57,6 @@ namespace SampleOS.Core.Terminal
         {
             // Check if core services are registered
             return ServiceLocator.Instance.IsRegistered<IPlayerStateService>() &&
-                    ServiceLocator.Instance.IsRegistered<IHackingSessionService>() &&
                     ServiceLocator.Instance.IsRegistered<IWorldService>();
         }
 
@@ -89,7 +87,6 @@ namespace SampleOS.Core.Terminal
 
             // Get service references
             playerState = ServiceLocator.Instance.Get<IPlayerStateService>();
-            hackingSession = ServiceLocator.Instance.Get<IHackingSessionService>();
             worldService = ServiceLocator.Instance.Get<IWorldService>();
 
             // Create command processor
@@ -171,10 +168,12 @@ namespace SampleOS.Core.Terminal
         #region Device Context Management
         /// <summary>
         /// Updates the device context if it changed
+        /// NOTE: TerminalController is deprecated. Use TerminalApp for new code.
+        /// This always uses the player's current device (no remote sessions).
         /// </summary>
         private void UpdateDeviceContext()
         {
-            var newDevice = hackingSession.CurrentDevice;
+            var newDevice = playerState.CurrentDevice;
 
             if (newDevice != currentDevice)
             {
@@ -187,28 +186,14 @@ namespace SampleOS.Core.Terminal
                     inputHandler.UpdateFileSystem(currentFileSystem);
                 }
 
-                // Show connection status change
-                if (commandProcessor.IsOnRemoteDevice())
-                {
-                    outputHandler.AppendColoredText(
-                        $"[Connected to {currentDevice.Hostname}]\n",
-                        new Color(0.3f, 1f, 0.3f) // Green for connection
-                    );
-                }
-                else
-                {
-                    outputHandler.AppendColoredText(
-                        "[Returned to local device]\n",
-                        new Color(0.7f, 0.7f, 1f) // Blue for local
-                    );
-                }
-
                 UpdatePrompt();
             }
         }
 
         /// <summary>
         /// Updates the prompt display based on current device and directory
+        /// NOTE: TerminalController is deprecated. Use TerminalApp for new code.
+        /// This always displays a local prompt (no remote sessions).
         /// </summary>
         private void UpdatePrompt()
         {
@@ -216,18 +201,10 @@ namespace SampleOS.Core.Terminal
                 return;
 
             string currentPath = currentFileSystem.CurrentPath;
-            string hostname = currentDevice.Hostname;
-            bool isRemote = commandProcessor.IsOnRemoteDevice();
 
-            // Show different prompt style for remote vs local
-            if (isRemote)
-            {
-                outputHandler.DisplayRemotePrompt(hostname, currentPath);
-            }
-            else
-            {
-                outputHandler.DisplayPrompt(currentPath);
-            }
+            // TerminalController is deprecated and only supports local device
+            // For remote sessions, use TerminalApp
+            outputHandler.DisplayPrompt(currentPath);
         }
 
         /// <summary>

@@ -236,7 +236,7 @@ namespace SampleOS.Core.Services
             if (device == null) return new List<IInteractiveApp>();
 
             return runningApps.Values
-                .Where(app => app.HostDevice.Id == device.Id)
+                .Where(app => app.HostDevice.DeviceId == device.DeviceId)
                 .ToList();
         }
 
@@ -260,9 +260,9 @@ namespace SampleOS.Core.Services
         {
             if (device == null) return false;
 
-            return runningApps.Values.Any(app => 
-                app.AppId == appId && 
-                app.HostDevice.Id == device.Id);
+            return runningApps.Values.Any(app =>
+                app.AppId == appId &&
+                app.HostDevice.DeviceId == device.DeviceId);
         }
 
         public void UpdateApps(float deltaTime)

@@ -14,13 +14,16 @@ using SampleOS.Core.Services;
 
 namespace SampleOS.Core.CommandSystem
 {
-    public class CommandProcessor : MonoBehaviour
+    /// <summary>
+    /// Processes and executes terminal commands.
+    /// NOTE: This is NOT a MonoBehaviour - it's a plain C# class that can be instantiated freely.
+    /// </summary>
+    public class CommandProcessor
     {
         private Dictionary<string, ICommand> commands = new();
         private Dictionary<string, string> aliases = new();
 
         private IPlayerStateService playerState;
-        private IHackingSessionService hackingSession;
         private IWorldService worldService;
 
         private IInteractiveCommand interactiveCommand;
@@ -39,10 +42,9 @@ namespace SampleOS.Core.CommandSystem
         {
             // Get services instead of creating state
             playerState = ServiceLocator.Instance.Get<IPlayerStateService>();
-            hackingSession = ServiceLocator.Instance.Get<IHackingSessionService>();
             worldService = ServiceLocator.Instance.Get<IWorldService>();
 
-            if (playerState == null || hackingSession == null || worldService == null)
+            if (playerState == null || worldService == null)
             {
                 Debug.LogError("Required services not initialized!");
                 return;
@@ -159,7 +161,10 @@ namespace SampleOS.Core.CommandSystem
             );
         }
 
-        private async Task<CommandResult> ProcessWithContextAsync(string input, CommandContext context)
+        /// <summary>
+        /// Process command with an externally-provided context (for app-specific contexts)
+        /// </summary>
+        public async Task<CommandResult> ProcessWithContextAsync(string input, CommandContext context)
         {
             // Split by conditional operators
             var segments = SplitByConditionalOperators(input);

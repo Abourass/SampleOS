@@ -45,15 +45,11 @@ namespace SampleOS.Core.CommandSystem
 
         // Lazy-loaded services
         private IPlayerStateService _playerState;
-        private IHackingSessionService _hackingSession;
         private IWorldService _worldService;
         private INetworkService _networkService;
 
         public IPlayerStateService PlayerState =>
             _playerState ??= ServiceLocator.Instance.Get<IPlayerStateService>();
-
-        public IHackingSessionService HackingSession =>
-            _hackingSession ??= ServiceLocator.Instance.Get<IHackingSessionService>();
 
         public IWorldService WorldService =>
             _worldService ??= ServiceLocator.Instance.Get<IWorldService>();
@@ -62,14 +58,17 @@ namespace SampleOS.Core.CommandSystem
             _networkService ??= ServiceLocator.Instance.Get<INetworkService>();
 
         // Smart accessors: Use local context if available, otherwise fall back to services
-        public Device CurrentDevice => _localDevice ?? HackingSession?.CurrentDevice;
+        public Device CurrentDevice => _localDevice ?? PlayerState?.CurrentDevice;
         public VirtualFileSystem FileSystem => CurrentDevice?.FileSystem;
-        public VirtualNode WorkingDirectory => _localWorkingDirectory ?? FileSystem?.GetNode("/");
-        public string CurrentUser => _localUser ?? PlayerState?.CurrentUser ?? "user";
+        public VirtualNode WorkingDirectory => _localWorkingDirectory ?? FileSystem?.ResolvePath("/");
+        public string CurrentUser => _localUser ?? CurrentDevice?.OS?.CurrentUser ?? "user";
         public object SourceApp => _sourceApp; // The app that created this context
-        
+
         public VirtualNetwork CurrentNetwork => WorldService?.GetCurrentCity()?.CurrentNetwork;
-        public bool IsRemoteSession => HackingSession?.IsOnRemoteDevice ?? false;
+
+        // IsRemoteSession is determined by comparing local vs current device
+        // For app-specific contexts, this is always false (apps have their own isolated context)
+        public bool IsRemoteSession => _localDevice != null ? false : (PlayerState?.CurrentDevice != null);
 
         /// <summary>
         /// Standard constructor for service-based context (backward compatible)

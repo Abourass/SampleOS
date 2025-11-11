@@ -24,7 +24,8 @@ namespace SampleOS.Core.UI
 
         [Header("Visual Settings")]
         [SerializeField] private TMP_FontAsset nerdFontAsset;
-        
+        [SerializeField] private PromptConfig promptConfig;
+
         // The app this view is bound to
         private TerminalApp terminalApp;
         
@@ -69,16 +70,29 @@ namespace SampleOS.Core.UI
             }
 
             terminalApp = termApp;
-            
+
             // Initialize history
             history = new TerminalHistory();
-            history.RestoreHistory(terminalApp.GetCommandHistory());
-            
+            foreach (var cmd in terminalApp.GetCommandHistory())
+            {
+                history.AddCommand(cmd);
+            }
+
+            // Load PromptConfig if not assigned
+            if (promptConfig == null)
+            {
+                promptConfig = Resources.Load<PromptConfig>("Configs/PromptConfig");
+                if (promptConfig == null)
+                {
+                    promptConfig = ScriptableObject.CreateInstance<PromptConfig>();
+                }
+            }
+
             // Create output handler
             outputHandler = new TerminalOutputHandler(
                 outputText,
                 scrollRect,
-                terminalApp.GetConfig().promptConfig,
+                promptConfig,
                 terminalApp.GetCommandProcessor(),
                 this
             );
@@ -212,12 +226,12 @@ namespace SampleOS.Core.UI
             if (!IsBound) return;
 
             var context = terminalApp.GetContext();
-            string currentPath = context.WorkingDirectory?.FullPath ?? "/";
-            
+            string currentPath = context.FileSystem?.CurrentPath ?? "/";
+
             // Check if we're connected remotely (via SSH)
             // This would be determined by checking the context's current device
-            bool isRemote = context.CurrentDevice != null && 
-                            context.CurrentDevice.Id != terminalApp.HostDevice.Id;
+            bool isRemote = context.CurrentDevice != null &&
+                            context.CurrentDevice.DeviceId != terminalApp.HostDevice.DeviceId;
 
             if (isRemote)
             {

@@ -44,18 +44,39 @@ namespace SampleOS.Core.Services
                 return;
             }
 
-            // Find or create the UI container
+            // Find or create Canvas for UI rendering
+            Canvas canvas = GameObject.FindFirstObjectByType<Canvas>();
+            if (canvas == null)
+            {
+                Debug.LogError("[ApplicationContainerService] No Canvas found in scene! UI elements require a Canvas to render. Please add a Canvas to your scene.");
+                return;
+            }
+
+            // Find or create the UI container under Canvas
             GameObject containerObj = GameObject.Find("AppUIContainer");
             if (containerObj == null)
             {
                 containerObj = new GameObject("AppUIContainer");
+                containerObj.transform.SetParent(canvas.transform, false);
                 GameObject.DontDestroyOnLoad(containerObj);
+
+                // Add RectTransform for proper UI parenting
+                RectTransform rectTransform = containerObj.AddComponent<RectTransform>();
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.sizeDelta = Vector2.zero;
+                rectTransform.anchoredPosition = Vector2.zero;
             }
-            
+            else if (containerObj.transform.parent != canvas.transform)
+            {
+                // If container exists but not under canvas, reparent it
+                containerObj.transform.SetParent(canvas.transform, false);
+            }
+
             uiContainer = containerObj.transform;
-            
+
             isInitialized = true;
-            Debug.Log("[ApplicationContainerService] Initialized");
+            Debug.Log("[ApplicationContainerService] Initialized with Canvas");
         }
 
         public void Shutdown()

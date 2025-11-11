@@ -39,7 +39,10 @@ namespace SampleOS.Core.Devices
 
       // Set physical accessibility
       device.IsPhysicallyAccessible = definition.IsPhysicallyAccessible;
-      device.LocationId = definition.LocationId;
+
+      // Note: Location is not set here because DeviceFactory doesn't have access to WorldService
+      // Location should be set by the DeviceRegistryService when the device is registered
+      // The LocationId from the definition can be used to look up the PhysicalLocation via WorldService.GetLocation()
 
       // Add default credentials if provided
       if (!string.IsNullOrEmpty(definition.DefaultUsername))

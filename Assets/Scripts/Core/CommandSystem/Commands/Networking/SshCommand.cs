@@ -64,19 +64,18 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       // If not found in current network, search other connected networks
       if (device == null)
       {
-        var connectionManager = currentCity.GetConnectionManager();
-        var activeConnections = connectionManager.GetActiveConnections();
+        var activeConnections = context.NetworkService.GetActiveConnections();
 
         foreach (var conn in activeConnections)
         {
           if (conn.TargetNetworkId != network.NetworkId)
           {
             // Try to find device in connected network
-            var cityResult = currentCity.GetNetworkInfo(conn.TargetNetworkId);
-            if (cityResult.IsSuccess)
+            var connectedNetwork = context.NetworkService.GetNetwork(conn.TargetNetworkId);
+            if (connectedNetwork != null)
             {
-              // This is a simplified lookup - you'd need to actually get the network
-              // For now, we'll just show a hint
+              device = connectedNetwork.GetDeviceByHostname(hostname) ?? connectedNetwork.GetDeviceByIP(hostname);
+              if (device != null) break;
             }
           }
         }

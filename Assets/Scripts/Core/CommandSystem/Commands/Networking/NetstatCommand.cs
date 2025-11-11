@@ -247,8 +247,8 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
             if (listeningOnly)
                 return connections;
 
-            // 2. Show active SSH connections (from HackingSession)
-            var activeConnections = context.HackingSession.ActiveConnections;
+            // 2. Show active SSH connections (from PlayerState)
+            var activeConnections = context.PlayerState.ActiveConnections;
             if (activeConnections != null && activeConnections.Count > 0)
             {
                 foreach (var remoteConn in activeConnections)

@@ -97,8 +97,7 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
       if (currentCity == null) return;
 
       var currentNetwork = currentCity.CurrentNetwork;
-      var connectionManager = currentCity.GetConnectionManager();
-      var activeConnections = connectionManager.GetActiveConnections();
+      var activeConnections = context.NetworkService.GetActiveConnections();
 
       context.Stdout.SetColor(new Color(0.5f, 0.7f, 1f)); // Light blue
       WriteOutput(context, "ACCESSIBLE NETWORKS:");
@@ -152,8 +151,11 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
 
       var currentNetwork = currentCity.CurrentNetwork;
 
-      // Get discovered network IDs from city
-      List<string> discoveredNetworkIds = currentCity.GetDiscoveredNetworks();
+      // Get discovered network IDs from NetworkService
+      List<string> discoveredNetworkIds = context.NetworkService.GetAccessibleNetworks();
+
+      // Remove the current network from the list (it's shown separately)
+      discoveredNetworkIds.RemoveAll(id => id == currentNetwork?.NetworkId);
 
       context.Stdout.SetColor(new Color(1f, 0.7f, 0.2f)); // Orange
       WriteOutput(context, "DISCOVERED NETWORKS:");
@@ -173,9 +175,8 @@ namespace SampleOS.Core.CommandSystem.Commands.Networking
         return;
       }
 
-      // Get connection manager to check if networks are already connected
-      var connectionManager = currentCity.GetConnectionManager();
-      var activeConnections = connectionManager.GetActiveConnections();
+      // Get active connections to check if networks are already connected
+      var activeConnections = context.NetworkService.GetActiveConnections();
 
       foreach (string networkId in discoveredNetworkIds)
       {

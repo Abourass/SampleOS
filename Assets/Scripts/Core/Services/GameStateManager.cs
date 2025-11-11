@@ -3,6 +3,7 @@ using SampleOS.Core.World;
 using SampleOS.Core.Devices;
 using SampleOS.Core.Session;
 using SampleOS.Core.Networking;
+using SampleOS.Core.Apps;
 
 namespace SampleOS.Core.Services
 {
@@ -67,9 +68,15 @@ namespace SampleOS.Core.Services
 
       // 5. Initialize Network Simulation (Device states, security updates)
       var networkService = new NetworkService();
+      ServiceLocator.Instance.Register<INetworkService>(networkService);
       networkService.Initialize(worldService.GetAllNetworks());
 
-      // 6. Setup cross-layer event subscriptions
+      // 6. Initialize Application Container (App lifecycle management)
+      var appContainerService = new ApplicationContainerService();
+      ServiceLocator.Instance.Register<IApplicationContainerService>(appContainerService);
+      appContainerService.Initialize();
+
+      // 7. Setup cross-layer event subscriptions
       SetupEventBridge();
 
       Debug.Log("=== Game State Initialized ===");

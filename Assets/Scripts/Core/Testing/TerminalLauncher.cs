@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using SampleOS.Core.Apps;
 using SampleOS.Core.Services;
 
@@ -13,7 +14,7 @@ namespace SampleOS.Core.Testing
     {
         [Header("Settings")]
         [Tooltip("Key to press to launch the terminal")]
-        public KeyCode launchKey = KeyCode.T;
+        public Key launchKey = Key.T;
 
         [Tooltip("Launch terminal automatically on start")]
         public bool launchOnStart = false;
@@ -21,6 +22,7 @@ namespace SampleOS.Core.Testing
         private IApplicationContainerService appService;
         private IPlayerStateService playerState;
         private IInteractiveApp currentTerminal;
+        private InputAction launchAction;
 
         private void Start()
         {
@@ -48,18 +50,34 @@ namespace SampleOS.Core.Testing
             }
         }
 
-        private void Update()
+        private void OnEnable()
         {
-            if (Input.GetKeyDown(launchKey))
+            // Create and setup input action
+            launchAction = new InputAction(binding: $"<Keyboard>/{launchKey}");
+            launchAction.performed += OnLaunchKeyPressed;
+            launchAction.Enable();
+        }
+
+        private void OnDisable()
+        {
+            // Clean up input action
+            if (launchAction != null)
             {
-                if (currentTerminal == null)
-                {
-                    LaunchTerminal();
-                }
-                else
-                {
-                    CloseTerminal();
-                }
+                launchAction.performed -= OnLaunchKeyPressed;
+                launchAction.Disable();
+                launchAction.Dispose();
+            }
+        }
+
+        private void OnLaunchKeyPressed(InputAction.CallbackContext context)
+        {
+            if (currentTerminal == null)
+            {
+                LaunchTerminal();
+            }
+            else
+            {
+                CloseTerminal();
             }
         }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using SampleOS.Core.World;
 using SampleOS.Core.Devices;
 using SampleOS.Core.Networking;
+using SampleOS.Core.Networking.Access;
 using UnityEngine;
 
 namespace SampleOS.Core.Services
@@ -52,6 +53,31 @@ namespace SampleOS.Core.Services
       currentCity = new City(startingCityId, "Metropolis");
       gameWorld.RegisterCity(currentCity);
 
+      // Create player's home network
+      var homeNetworkMetadata = new NetworkMetadata
+      {
+          Name = "Home Network",
+          Description = "Player's home network",
+          Organization = "Personal",
+          Type = NetworkType.Residential,
+          IPRange = "192.168.1.0/24"
+      };
+
+      var homeNetworkSecurity = new NetworkSecurityProfile
+      {
+          DefaultSecurityLevel = SecurityLevel.Low,
+          RequiresVPN = false,
+          HasFirewall = true,
+          AllowsGuestAccess = true
+      };
+
+      var homeNetwork = new VirtualNetwork(
+          id: "home_network",
+          metadata: homeNetworkMetadata,
+          security: homeNetworkSecurity
+      );
+      currentCity.AddNetwork(homeNetwork);
+
       // Create player's device
       playerDevice = DeviceFactory.CreatePlayerDevice(
           "player_laptop",
@@ -60,7 +86,7 @@ namespace SampleOS.Core.Services
       );
 
       gameWorld.RegisterDevice(playerDevice);
-      currentCity.CurrentNetwork.AddDevice(playerDevice);
+      homeNetwork.AddDevice(playerDevice);
 
       // Set initial location
       playerLocation = new PhysicalLocation

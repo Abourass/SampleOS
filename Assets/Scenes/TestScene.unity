@@ -684,7 +684,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: SampleOS::SampleOS.Core.Testing.TerminalLauncher
   launchKey: 95
-  launchOnStart: 0
+  launchOnStart: 1
 --- !u!4 &2048293876
 Transform:
   m_ObjectHideFlags: 0

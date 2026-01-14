@@ -129,6 +129,23 @@ namespace SampleOS.Core.UI.Window
 
         #region Title Bar Dragging
 
+        /// <summary>
+        /// Called by TitleBarDragHandler to request focus.
+        /// </summary>
+        public void RequestFocus()
+        {
+            OnFocusRequested?.Invoke();
+        }
+
+        /// <summary>
+        /// Called by TitleBarDragHandler when window is moved.
+        /// </summary>
+        public void NotifyWindowMoved(Vector2 newPosition)
+        {
+            OnWindowMoved?.Invoke(newPosition);
+            GameEvents.Instance.Trigger(GameEventType.WindowMoved, InstanceId);
+        }
+
         public void OnPointerDown(PointerEventData eventData)
         {
             // Request focus when clicking anywhere on the window

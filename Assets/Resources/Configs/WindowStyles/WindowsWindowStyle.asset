@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f6789012345678abcd0001, type: 3}
+  m_Name: WindowsWindowStyle
+  m_EditorClassIdentifier: SampleOS::SampleOS.Core.UI.Window.WindowChromeStyle
+  titleBarHeight: 32
+  titleBarFocusedColor: {r: 0.29, g: 0.48, b: 0.65, a: 1}
+  titleBarUnfocusedColor: {r: 0.23, g: 0.35, b: 0.55, a: 1}
+  titleBarGradientEndColor: {r: 0.42, g: 0.23, b: 0.49, a: 1}
+  titleTextColor: {r: 1, g: 1, b: 1, a: 1}
+  titleFont: {fileID: 0}
+  titleFontSize: 13
+  titleFontStyle: 0
+  controlPosition: 1
+  controlButtonSize: 20
+  controlButtonSpacing: 0
+  controlButtonPadding: 0
+  closeButtonSprite: {fileID: 0}
+  closeButtonColor: {r: 0.9, g: 0.3, b: 0.3, a: 1}
+  closeButtonHoverColor: {r: 1, g: 0.2, b: 0.2, a: 1}
+  minimizeButtonSprite: {fileID: 0}
+  minimizeButtonColor: {r: 0.7, g: 0.7, b: 0.7, a: 1}
+  minimizeButtonHoverColor: {r: 1, g: 0.75, b: 0.2, a: 1}
+  maximizeButtonSprite: {fileID: 0}
+  restoreButtonSprite: {fileID: 0}
+  maximizeButtonColor: {r: 0.7, g: 0.7, b: 0.7, a: 1}
+  maximizeButtonHoverColor: {r: 0.3, g: 1, b: 0.4, a: 1}
+  borderWidth: 3
+  borderFocusedColor: {r: 0.29, g: 0.48, b: 0.65, a: 1}
+  borderUnfocusedColor: {r: 0.4, g: 0.4, b: 0.4, a: 0.8}
+  borderSprite: {fileID: 0}
+  borderCornerRadius: 8
+  enableShadow: 1
+  shadowColor: {r: 0, g: 0, b: 0, a: 0.3}
+  shadowOffset: {x: 4, y: -4}
+  shadowBlur: 8
+  resizeHandleSize: 5
+  resizeCornerSize: 12
+  resizeHandleHoverColor: {r: 0.29, g: 0.48, b: 0.65, a: 0.5}
+  focusAnimationDuration: 0.1
+  minimizeAnimationDuration: 0.2
+  maximizeAnimationDuration: 0.2
+  contentPadding: 2
+  contentBackgroundColor: {r: 0.1, g: 0.1, b: 0.12, a: 0.95}

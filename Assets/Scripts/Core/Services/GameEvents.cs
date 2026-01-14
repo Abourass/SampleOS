@@ -30,6 +30,15 @@ namespace SampleOS.Core.Services
     TerminalClosed,
     AppFocused,
 
+    // Window events
+    WindowFocused,
+    WindowUnfocused,
+    WindowMinimized,
+    WindowMaximized,
+    WindowRestored,
+    WindowMoved,
+    WindowResized,
+
     // System events
     GameExiting
   }

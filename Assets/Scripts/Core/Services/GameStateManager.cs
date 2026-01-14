@@ -76,7 +76,11 @@ namespace SampleOS.Core.Services
       ServiceLocator.Instance.Register<IApplicationContainerService>(appContainerService);
       appContainerService.Initialize();
 
-      // 7. Setup cross-layer event subscriptions
+      // 7. Initialize Window Manager (Window z-order, focus, state)
+      var windowManager = new WindowManager();
+      ServiceLocator.Instance.Register<IWindowManager>(windowManager);
+
+      // 8. Setup cross-layer event subscriptions
       SetupEventBridge();
 
       Debug.Log("=== Game State Initialized ===");

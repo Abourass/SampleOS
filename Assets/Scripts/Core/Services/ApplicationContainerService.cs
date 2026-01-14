@@ -5,6 +5,7 @@ using UnityEngine;
 using SampleOS.Core.Apps;
 using SampleOS.Core.Devices;
 using SampleOS.Core.UI;
+using SampleOS.Core.UI.Window;
 
 namespace SampleOS.Core.Services
 {
@@ -200,6 +201,9 @@ namespace SampleOS.Core.Services
             runningApps[app.InstanceId] = app;
             appViews[app.InstanceId] = view;
 
+            // Wire up window chrome if present
+            WireUpWindowChrome(uiInstance, app);
+
             // Register app with device
             if (device is PlayerDevice playerDevice)
             {
@@ -211,7 +215,7 @@ namespace SampleOS.Core.Services
             view.Show();
 
             Debug.Log($"[ApplicationContainerService] Launched {app.DisplayName} (Instance: {app.InstanceId}) on {device.Hostname}");
-            
+
             return app;
         }
 
@@ -225,19 +229,23 @@ namespace SampleOS.Core.Services
 
             Debug.Log($"[ApplicationContainerService] Closing {app.DisplayName} (Instance: {instanceId})");
 
+            // Unregister from window manager
+            var windowManager = ServiceLocator.Instance.Get<IWindowManager>();
+            windowManager?.UnregisterWindow(instanceId);
+
             // Trigger app closed lifecycle
             app.OnAppClosed();
-            
+
             // Cleanup view
             if (appViews.TryGetValue(instanceId, out var view))
             {
                 view.UnbindFromApp();
-                
+
                 if (view is MonoBehaviour viewMono)
                 {
                     UnityEngine.Object.Destroy(viewMono.gameObject);
                 }
-                
+
                 appViews.Remove(instanceId);
             }
 
@@ -329,6 +337,67 @@ namespace SampleOS.Core.Services
                 "irc" => throw new NotImplementedException("IRC app not yet implemented"),
                 _ => throw new ArgumentException($"Unknown app ID: {appId}")
             };
+        }
+
+        #endregion
+
+        #region Window Chrome Integration
+
+        /// <summary>
+        /// Wire up WindowChrome component if present on the app UI.
+        /// </summary>
+        private void WireUpWindowChrome(GameObject uiInstance, IInteractiveApp app)
+        {
+            var chrome = uiInstance.GetComponent<WindowChrome>();
+            if (chrome == null)
+                return;
+
+            // Set the instance ID for tracking
+            chrome.InstanceId = app.InstanceId;
+            chrome.SetTitle(app.DisplayName);
+
+            // Wire up window control events
+            chrome.OnCloseRequested += () => CloseApp(app.InstanceId);
+
+            chrome.OnMinimizeRequested += () =>
+            {
+                var windowManager = ServiceLocator.Instance.Get<IWindowManager>();
+                windowManager?.MinimizeWindow(app.InstanceId);
+            };
+
+            chrome.OnMaximizeRequested += () =>
+            {
+                var windowManager = ServiceLocator.Instance.Get<IWindowManager>();
+                windowManager?.MaximizeWindow(app.InstanceId);
+            };
+
+            chrome.OnFocusRequested += () =>
+            {
+                var windowManager = ServiceLocator.Instance.Get<IWindowManager>();
+                windowManager?.BringToFront(app.InstanceId);
+            };
+
+            // Register with window manager for z-order and focus tracking
+            var manager = ServiceLocator.Instance.Get<IWindowManager>();
+            manager?.RegisterWindow(app.InstanceId, chrome);
+
+            // Wire up focus events to app lifecycle
+            if (manager != null)
+            {
+                manager.OnWindowFocused += (id) =>
+                {
+                    if (id == app.InstanceId)
+                        app.OnFocusGained();
+                };
+
+                manager.OnWindowUnfocused += (id) =>
+                {
+                    if (id == app.InstanceId)
+                        app.OnFocusLost();
+                };
+            }
+
+            Debug.Log($"[ApplicationContainerService] Wired up WindowChrome for {app.DisplayName}");
         }
 
         #endregion

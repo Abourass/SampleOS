@@ -62,6 +62,7 @@ namespace SampleOS.Core.CommandSystem
             Register(new HelpCommand(commands));
             Register(new PsCommand(this));
             Register(new QuitCommand());
+            Register(new SwitchOsCommand());
 
             // File Operations
             Register(new CatCommand());

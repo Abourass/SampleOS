@@ -163,6 +163,7 @@ namespace SampleOS.Core.UI.Window
                 return;
 
             isDragging = true;
+            Debug.Log($"[WindowChrome] Begin drag for window {InstanceId}");
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -171,19 +172,17 @@ namespace SampleOS.Core.UI.Window
                 return;
 
             // Move window by drag delta
-            Vector2 newPosition = windowRect.anchoredPosition + eventData.delta / GetCanvasScale();
+            Vector2 delta = eventData.delta / GetCanvasScale();
+            windowRect.anchoredPosition += delta;
 
-            // Clamp to parent bounds (keep title bar on screen)
-            newPosition = ClampToParentBounds(newPosition);
-
-            windowRect.anchoredPosition = newPosition;
-            OnWindowMoved?.Invoke(newPosition);
+            OnWindowMoved?.Invoke(windowRect.anchoredPosition);
             GameEvents.Instance.Trigger(GameEventType.WindowMoved, InstanceId);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             isDragging = false;
+            Debug.Log($"[WindowChrome] End drag for window {InstanceId}");
         }
 
         private bool IsPointerOverTitleBar(PointerEventData eventData)

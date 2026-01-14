@@ -201,23 +201,52 @@ namespace SampleOS.Editor
             if (rootRect == null)
                 rootRect = root.AddComponent<RectTransform>();
 
+            // Add transparent image to root so it receives drag events
+            Image rootImage = root.GetComponent<Image>();
+            if (rootImage == null)
+            {
+                rootImage = root.AddComponent<Image>();
+                rootImage.color = new Color(0, 0, 0, 0); // Fully transparent
+                rootImage.raycastTarget = true;
+            }
+
             CanvasGroup canvasGroup = root.GetComponent<CanvasGroup>();
             if (canvasGroup == null)
                 canvasGroup = root.AddComponent<CanvasGroup>();
 
             WindowChrome chrome = root.AddComponent<WindowChrome>();
 
+            // Load and assign the appropriate style asset
+            string styleName = osType switch
+            {
+                OSType.Linux => "LinuxWindowStyle",
+                OSType.Windows => "WindowsWindowStyle",
+                OSType.Mac => "MacWindowStyle",
+                _ => "LinuxWindowStyle"
+            };
+            WindowChromeStyle styleAsset = AssetDatabase.LoadAssetAtPath<WindowChromeStyle>($"{StylesPath}/{styleName}.asset");
+            if (styleAsset == null)
+            {
+                Debug.LogWarning($"[WindowChromeSetup] Style asset not found: {styleName}.asset. Creating it now...");
+                // Create the style if it doesn't exist
+                switch (osType)
+                {
+                    case OSType.Linux: CreateLinuxStyle(); break;
+                    case OSType.Windows: CreateWindowsStyle(); break;
+                    case OSType.Mac: CreateMacStyle(); break;
+                }
+                styleAsset = AssetDatabase.LoadAssetAtPath<WindowChromeStyle>($"{StylesPath}/{styleName}.asset");
+            }
+
             // Create Border Frame
             GameObject borderFrame = CreateBorderFrame(root.transform, osType);
 
-            // Create TitleBar with drag handler
+            // Create TitleBar
             GameObject titleBar = CreateUIElement("TitleBar", root.transform);
             titleBar.transform.SetSiblingIndex(1);
             Image titleBarBg = titleBar.AddComponent<Image>();
             titleBarBg.color = GetTitleBarColor(osType);
-
-            // Add the drag handler to enable window dragging
-            titleBar.AddComponent<TitleBarDragHandler>();
+            titleBarBg.raycastTarget = false; // Don't block events to root
 
             RectTransform titleBarRect = titleBar.GetComponent<RectTransform>();
             titleBarRect.anchorMin = new Vector2(0, 1);
@@ -275,9 +304,12 @@ namespace SampleOS.Editor
             if (borderImage != null)
                 serializedChrome.FindProperty("borderImage").objectReferenceValue = borderImage;
             serializedChrome.FindProperty("resizeHandles").objectReferenceValue = handles;
+            // Assign the style asset
+            if (styleAsset != null)
+                serializedChrome.FindProperty("style").objectReferenceValue = styleAsset;
             serializedChrome.ApplyModifiedProperties();
 
-            Debug.Log("[WindowChromeSetup] Window chrome hierarchy created successfully");
+            Debug.Log($"[WindowChromeSetup] Window chrome hierarchy created successfully with {styleName} style");
         }
 
         private static void CreateWindowControls(Transform titleBar, OSType osType,

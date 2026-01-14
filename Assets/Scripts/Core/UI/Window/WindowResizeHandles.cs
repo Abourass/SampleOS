@@ -219,16 +219,19 @@ namespace SampleOS.Core.UI.Window
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            Debug.Log($"[ResizeHandle] Begin drag on {direction} handle");
             parent?.NotifyResizeBegin();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
+            Debug.Log($"[ResizeHandle] Dragging {direction} handle, delta: {eventData.delta}");
             parent?.NotifyResize(direction, eventData.delta);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            Debug.Log($"[ResizeHandle] End drag on {direction} handle");
             parent?.NotifyResizeEnd();
         }
     }
